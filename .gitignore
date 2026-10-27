@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.vercel/
+screenshots/
+.tanstack/
+artifacts/
+.grok/skills/
+.grok/references/
+.grok/status
+.grok/og-pending
+*.log

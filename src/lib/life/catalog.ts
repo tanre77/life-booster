@@ -1,0 +1,53 @@
+export const RELIGIONS = [
+  "Christianity",
+  "Catholicism",
+  "Protestant",
+  "Judaism",
+  "Islam",
+  "Hinduism",
+  "Buddhism",
+  "Sikhism",
+  "Indigenous traditions",
+  "Secular",
+  "Spiritual, not religious",
+  "Interfaith",
+] as const;
+
+export const PHILOSOPHIES = [
+  "Stoicism",
+  "Existentialism",
+  "Humanism",
+  "Mindfulness",
+  "Person-centered",
+  "Strengths-based",
+  "Narrative",
+  "Acceptance and commitment",
+  "Positive psychology",
+  "Contemplative practice",
+] as const;
+
+export const SPECIALTIES = [
+  "Grief",
+  "Low mood",
+  "Stress",
+  "Relationships",
+  "Life transitions",
+  "Burnout",
+  "Faith questions",
+  "Self-worth",
+  "Sleep",
+  "Family",
+  "Habits",
+  "Work",
+] as const;
+
+export const MOODS = [
+  { value: 1, label: "Heavy", hint: "A hard day" },
+  { value: 2, label: "Low", hint: "Dragging" },
+  { value: 3, label: "Steady", hint: "Even" },
+  { value: 4, label: "Bright", hint: "Lighter" },
+  { value: 5, label: "Lifted", hint: "Open" },
+] as const;
+
+export const DISCLAIMER =
+  "Life Booster counselors are not licensed therapists, psychologists, psychiatrists, or medical providers. A visit is peer support. It is not therapy, diagnosis, or treatment. Life Booster is not liable for advice, opinions, or outcomes from counselors. Life Booster may dismiss any counselor without notice. If you are in crisis, call or text 988 in the US, or contact local emergency services.";
