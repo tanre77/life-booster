@@ -118,6 +118,25 @@ function Today({ name }: { name: string }) {
     });
   }, [dashboard.data?.moods, today]);
 
+  const weekNotes = useMemo(() => {
+    const map = new Map((dashboard.data?.moods ?? []).map((entry) => [entry.loggedOn, entry]));
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = shiftLocal(today, index - 6);
+      const entry = map.get(date);
+      const label = new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+      let state = "Not logged";
+      if (entry && entry.note.trim()) state = entry.shareWithCounselors ? "Shareable" : "Private";
+      else if (entry) state = "Mood only";
+      return {
+        date,
+        label,
+        mood: entry ? (MOODS.find((item) => item.value === entry.mood)?.label ?? "") : "",
+        note: entry?.note.trim() ?? "",
+        state,
+      };
+    });
+  }, [dashboard.data?.moods, today]);
+
   async function onSave() {
     setSaving(true);
     setStatus(null);
@@ -191,6 +210,26 @@ function Today({ name }: { name: string }) {
               {saving ? "Saving…" : "Save today"}
             </Button>
             {status ? <p className="text-sm text-muted">{status}</p> : null}
+          </div>
+          <div className="space-y-2 border-t border-line pt-4">
+            <h3 className="text-sm text-muted">This week</h3>
+            <ul className="space-y-2">
+              {weekNotes.map((day) => (
+                <li key={day.date} className="rounded-2xl border border-line bg-paper px-3 py-2">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <p className="text-sm font-medium">
+                      {day.label}
+                      {day.date === today ? " · today" : ""}
+                    </p>
+                    <p className="text-xs text-muted">
+                      {day.mood ? `${day.mood} · ` : ""}
+                      {day.state}
+                    </p>
+                  </div>
+                  {day.note ? <p className="mt-1 text-sm">{day.note}</p> : null}
+                </li>
+              ))}
+            </ul>
           </div>
         </Panel>
       </div>

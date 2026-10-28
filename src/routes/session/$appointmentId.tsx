@@ -1,11 +1,12 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Shell } from "@/components/shell";
 import { VideoStage } from "@/components/video-room";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getSessionRoom, listMessages, postMessage } from "@/lib/life/api";
+import type { SessionRoom } from "@/lib/life/types";
 import { DISCLAIMER, MOODS } from "@/lib/life/catalog";
 
 export const Route = createFileRoute("/session/$appointmentId")({ component: SessionPage });
@@ -35,34 +36,17 @@ function SessionPage() {
       </Shell>
     );
   }
-  return <Room appointmentId={id} />;
+  return <Room appointmentId={id} data={room.data} />;
 }
 
-function Room({ appointmentId }: { appointmentId: number }) {
-  const room = useQuery({
-    queryKey: ["session", appointmentId],
-    queryFn: () => getSessionRoom({ data: { id: appointmentId } }),
-  });
-  const data = room.data;
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
+function Room({ appointmentId, data }: { appointmentId: number; data: SessionRoom }) {
   const [body, setBody] = useState("");
   const client = useQueryClient();
   const messages = useQuery({
     queryKey: ["messages", appointmentId],
     queryFn: () => listMessages({ data: { id: appointmentId } }),
-    refetchInterval: () => (document.hidden ? false : 3000),
+    refetchInterval: () => (document.hidden ? false : 4000),
   });
-
-  if (!data) return null;
-  const end = new Date(data.startsAt).getTime() + data.durationMin * 60 * 1000;
-  const remaining = Math.max(0, end - now);
-  const minutes = Math.floor(remaining / 60000);
-  const seconds = Math.floor((remaining % 60000) / 1000);
-  const clock = remaining === 0 ? "Time is up" : `${minutes}:${String(seconds).padStart(2, "0")}`;
 
   async function send() {
     const text = body.trim();
@@ -73,7 +57,7 @@ function Room({ appointmentId }: { appointmentId: number }) {
   }
 
   return (
-    <VideoStage appointmentId={appointmentId} role={data.role} title={data.otherName} timer={clock} sheet={
+    <VideoStage appointmentId={appointmentId} role={data.role} title={data.otherName} durationMin={data.durationMin} sheet={
       <div className="space-y-4">
         <section>
           <h2 className="font-display text-xl">Shared notes</h2>

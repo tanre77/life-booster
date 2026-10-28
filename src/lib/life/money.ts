@@ -1,7 +1,7 @@
 export const DURATIONS = [30, 60, 90, 120] as const;
 export type DurationMin = (typeof DURATIONS)[number];
 
-export const AD_DISCOUNT = 0.2;
+export const AD_DISCOUNT = 0.02;
 export const MIN_HOURLY_CENTS = 1500;
 export const MAX_HOURLY_CENTS = 40000;
 

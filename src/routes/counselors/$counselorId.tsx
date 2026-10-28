@@ -212,7 +212,7 @@ function BookCard({ counselorId, name, hourly }: { counselorId: string; name: st
         <h2 className="font-display text-2xl">Book</h2>
         <p className="text-sm text-muted">
           {hoursLabel(duration)} × {formatMoney(hourly)} hour rate
-          {ads && adReady ? " · 20% sponsor rate" : ""} = {formatMoney(price)}
+          {ads && adReady ? " · 2% sponsor rate" : ""} = {formatMoney(price)}
         </p>
       </div>
       <div className="grid grid-cols-4 gap-2">
@@ -282,7 +282,7 @@ function BookCard({ counselorId, name, hourly }: { counselorId: string; name: st
           }}
           className="mt-1 h-5 w-5 accent-spruce"
         />
-        <span>Take 20% off by including a short sponsor. On iPhone and Android this spot is filled by X Ads.</span>
+        <span>Take 2% off by including a short sponsor. On iPhone and Android this spot is filled by X Ads.</span>
       </label>
       {ads ? (
         <div className="rounded-2xl border border-dashed border-line bg-paper p-3 text-sm">

@@ -32,30 +32,114 @@ export function VideoStage({
   appointmentId,
   role,
   title,
-  timer,
+  durationMin,
   sheet,
 }: {
   appointmentId: number;
   role: "member" | "counselor" | "solo";
   title: string;
-  timer: string;
+  durationMin: number;
   sheet: ReactNode;
 }) {
   const localRef = useRef<HTMLVideoElement>(null);
   const remoteRef = useRef<HTMLVideoElement>(null);
   const [started, setStarted] = useState(false);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const [muted, setMuted] = useState(false);
   const [cameraOn, setCameraOn] = useState(true);
   const [camNote, setCamNote] = useState<string | null>(null);
   const [phase, setPhase] = useState("Camera is off until you start.");
   const [remoteLive, setRemoteLive] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [recordWanted, setRecordWanted] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
+  const [notes, setNotes] = useState("");
+  const [ended, setEnded] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
   const navigate = useNavigate();
 
+  useEffect(() => {
+    if (!startedAt) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [startedAt]);
+
+  const visitMs = Math.max(1, durationMin) * 60 * 1000;
+  const remaining = startedAt ? Math.max(0, visitMs - (now - startedAt)) : visitMs;
+  const clockMinutes = Math.floor(remaining / 60000);
+  const clockSeconds = Math.floor((remaining % 60000) / 1000);
+  const clock =
+    !startedAt ? `${clockMinutes}:${String(clockSeconds).padStart(2, "0")}` : remaining === 0 ? "Time is up" : `${clockMinutes}:${String(clockSeconds).padStart(2, "0")}`;
+
+  function stopRecording() {
+    const rec = recorderRef.current;
+    if (!rec || rec.state === "inactive") return;
+    rec.stop();
+    setRecording(false);
+  }
+
+  function beginRecording() {
+    const local = streamRef.current;
+    if (!local || typeof MediaRecorder === "undefined") {
+      setCamNote("This browser cannot record the visit.");
+      setRecordWanted(false);
+      return;
+    }
+    if (recorderRef.current && recorderRef.current.state !== "inactive") return;
+    const mixed = new MediaStream();
+    for (const track of local.getTracks()) mixed.addTrack(track);
+    for (const track of remoteStreamRef.current?.getTracks() ?? []) mixed.addTrack(track);
+    const mime = ["video/mp4", "video/webm;codecs=vp8,opus", "video/webm"].find((type) => MediaRecorder.isTypeSupported(type));
+    let rec: MediaRecorder;
+    try {
+      rec = mime ? new MediaRecorder(mixed, { mimeType: mime }) : new MediaRecorder(mixed);
+    } catch {
+      setCamNote("This browser cannot record the visit.");
+      setRecordWanted(false);
+      return;
+    }
+    chunksRef.current = [];
+    rec.ondataavailable = (event) => {
+      if (event.data.size) chunksRef.current.push(event.data);
+    };
+    rec.onstop = () => {
+      const blob = new Blob(chunksRef.current, { type: rec.mimeType || "video/webm" });
+      if (blob.size) setRecordingUrl(URL.createObjectURL(blob));
+    };
+    rec.start(1000);
+    recorderRef.current = rec;
+    setRecording(true);
+  }
+
+  useEffect(() => {
+    if (remoteLive && startedAt === null) setStartedAt(Date.now());
+  }, [remoteLive, startedAt]);
+
+  useEffect(() => {
+    if (!recordWanted || !remoteLive || !started || recording || recordingUrl || ended) return;
+    beginRecording();
+  }, [recordWanted, remoteLive, started, recording, recordingUrl, ended]);
+
+  useEffect(() => {
+    if (!startedAt || remaining > 0 || ended) return;
+    stopRecording();
+    setEnded(true);
+  }, [startedAt, remaining, ended]);
+
   function leave() {
+    stopRecording();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     void navigate({ to: "/visits" });
+  }
+
+  function wrapUp() {
+    stopRecording();
+    setEnded(true);
   }
 
   useEffect(() => {
@@ -70,6 +154,8 @@ export function VideoStage({
     let afterId = 0;
     let offered = false;
     let answered = false;
+
+    let mediaReady = false;
 
     const stopStream = () => {
       streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -107,22 +193,24 @@ export function VideoStage({
         streamRef.current = stream;
         attach(localRef.current, stream);
         stream.getTracks().forEach((track) => pc?.addTrack(track, stream));
-        setPhase("Camera on. Your counselor will be joining soon.");
+        setPhase(role === "counselor" ? "Camera on. Waiting for the member to join." : "Camera on. Your counselor will be joining soon.");
       } catch {
         if (!stopped) {
           setCamNote("Camera and microphone stayed off. Allow them in the phone settings, then start again. Messages still work.");
-          setPhase("Waiting without a camera. Your counselor will be joining soon.");
+          setPhase(role === "counselor" ? "Waiting for the member, without a camera." : "Waiting without a camera. Your counselor will be joining soon.");
         }
       }
+      mediaReady = true;
     }
 
     if (pc) {
       pc.ontrack = (event) => {
         const [stream] = event.streams;
         if (stream) {
+          remoteStreamRef.current = stream;
           attach(remoteRef.current, stream);
           setRemoteLive(true);
-          setPhase("Picture connected.");
+          setPhase(role === "counselor" ? "The member is here. The visit timer is running." : "Your counselor is here. The visit timer is running.");
         }
       };
       pc.onicecandidate = (event) => {
@@ -141,23 +229,32 @@ export function VideoStage({
       if (stopped || !pc) return;
       try {
         const presence = await touchPresence({ data: { id: appointmentId } });
-        if (presence.peer && role === "member" && !offered && pc.signalingState === "stable") {
+        const canOffer =
+          mediaReady && presence.peer && !offered && !answered && pc.signalingState === "stable" && (role === "member" || role === "counselor");
+        if (canOffer) {
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
           await postSignal({
             data: { id: appointmentId, kind: "offer", payload: JSON.stringify(pc.localDescription) },
           });
           offered = true;
-          setPhase("Reaching their camera…");
-        } else if (!presence.peer && role === "member" && !offered) {
-          setPhase("Waiting for them to open this visit.");
-        } else if (role === "counselor" && !answered) {
-          setPhase(presence.peer ? "They are here. Connecting picture…" : "You are in the room.");
+          setPhase(role === "counselor" ? "Connecting to the member…" : "Reaching their camera…");
+        } else if (!presence.peer && !offered && !answered) {
+          setPhase(role === "counselor" ? "You are in the room. The member has not opened the visit yet." : "Waiting for your counselor to open this visit.");
         }
         const signals = await listSignals({ data: { id: appointmentId, afterId } });
         for (const signal of signals) {
           afterId = Math.max(afterId, signal.id);
-          if (signal.kind === "offer" && role === "counselor" && !answered) {
+          if (signal.kind === "offer" && !answered) {
+            if (offered && pc.signalingState === "have-local-offer") {
+              if (role === "member") continue;
+              try {
+                await pc.setLocalDescription({ type: "rollback" });
+              } catch {
+                continue;
+              }
+            }
+            if (pc.signalingState !== "stable" && pc.signalingState !== "have-local-offer") continue;
             await pc.setRemoteDescription(JSON.parse(signal.payload) as RTCSessionDescriptionInit);
             await flushIce();
             const answer = await pc.createAnswer();
@@ -166,9 +263,11 @@ export function VideoStage({
               data: { id: appointmentId, kind: "answer", payload: JSON.stringify(pc.localDescription) },
             });
             answered = true;
-          } else if (signal.kind === "answer" && role === "member") {
+            offered = true;
+          } else if (signal.kind === "answer" && !pc.currentRemoteDescription) {
             await pc.setRemoteDescription(JSON.parse(signal.payload) as RTCSessionDescriptionInit);
             await flushIce();
+            answered = true;
           } else if (signal.kind === "ice") {
             const candidate = JSON.parse(signal.payload) as RTCIceCandidateInit;
             if (!pc.remoteDescription) pendingIce.push(candidate);
@@ -178,7 +277,7 @@ export function VideoStage({
       } catch {
         /* signaling can retry on the next tick */
       }
-      if (!stopped) timerId = window.setTimeout(() => void tick(), document.hidden ? 5000 : 1600);
+      if (!stopped) timerId = window.setTimeout(() => void tick(), document.hidden ? 8000 : 2500);
     }
 
     void boot();
@@ -239,7 +338,7 @@ export function VideoStage({
         <div className="flex min-w-0 items-start gap-2">
           <button
             type="button"
-            onClick={leave}
+            onClick={wrapUp}
             className="mt-1 grid h-11 w-11 shrink-0 place-items-center rounded-full bg-surface/15 text-surface"
             aria-label="Leave video"
           >
@@ -251,16 +350,35 @@ export function VideoStage({
             <p className="text-sm text-surface/85">{camNote ?? phase}</p>
           </div>
         </div>
-        <p className="shrink-0 font-display text-3xl tabular-nums">{timer}</p>
+        <div className="text-right">
+          <p className="shrink-0 font-display text-3xl tabular-nums">{clock}</p>
+          <p className="text-xs text-surface/75">{startedAt ? (recording ? "Recording" : "Visit time") : role === "counselor" ? "Starts when the member joins" : "Starts when they join"}</p>
+        </div>
       </div>
       {!started ? (
         <div className="absolute inset-0 z-20 grid place-items-center bg-spruce-deep/85 p-6 text-center">
           <div className="max-w-xs space-y-3">
             <p className="text-sm text-surface/90">
-              This will be a live person. Your counselor will be joining soon. Your camera starts when you tap.
+              {role === "counselor"
+                ? "You are the counselor. Join to connect your camera. The timer starts when the member is on the call."
+                : "This will be a live person. Your counselor will be joining soon. The timer starts when they join. Your camera starts when you tap."}
             </p>
-            <Button type="button" variant="dark" className="bg-surface text-ink hover:bg-paper" onClick={() => setStarted(true)}>
-              Start video
+            <label className="flex items-start justify-center gap-3 text-left text-sm text-surface/90">
+              <input
+                type="checkbox"
+                checked={recordWanted}
+                onChange={(event) => setRecordWanted(event.target.checked)}
+                className="mt-1 h-5 w-5 accent-spruce"
+              />
+              <span>Record this visit. You can save the recording when it ends.</span>
+            </label>
+            <Button
+              type="button"
+              variant="dark"
+              className="bg-surface text-ink hover:bg-paper"
+              onClick={() => setStarted(true)}
+            >
+              {role === "counselor" ? "Join video" : "Start video"}
             </Button>
           </div>
         </div>
@@ -315,8 +433,38 @@ export function VideoStage({
             </button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4" style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}>
+            <label className="mb-4 block text-sm">
+              <span className="font-medium">Your notes</span>
+              <textarea
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                placeholder="Kept for you at the end of the visit"
+                className="mt-2 min-h-28 w-full rounded-2xl border border-line bg-paper px-3 py-2"
+              />
+            </label>
             {sheet}
           </div>
+        </div>
+      ) : null}
+      {ended ? (
+        <div className="absolute inset-0 z-40 overflow-y-auto bg-paper px-4 py-6 text-ink" style={{ paddingTop: "max(1.5rem, env(safe-area-inset-top))" }}>
+          <h2 className="font-display text-4xl">Visit notes</h2>
+          <p className="mt-2 text-sm text-muted">Saved from this visit. Nothing here is sent unless you share it.</p>
+          <section className="mt-5">
+            <h3 className="font-display text-2xl">Your notes</h3>
+            <p className="mt-2 whitespace-pre-wrap text-sm">{notes.trim() || "No notes were kept."}</p>
+          </section>
+          {recordingUrl ? (
+            <a href={recordingUrl} download={`visit-${appointmentId}.webm`} className="mt-5 inline-flex min-h-11 items-center rounded-full bg-spruce-deep px-4 text-sm text-surface">
+              Save recording
+            </a>
+          ) : recordWanted ? (
+            <p className="mt-5 text-sm text-muted">The recording will appear here when the file is ready.</p>
+          ) : null}
+          <div className="mt-6">{sheet}</div>
+          <button type="button" onClick={leave} className="mt-6 inline-flex min-h-11 items-center rounded-full border border-line px-4 text-sm">
+            Back to visits
+          </button>
         </div>
       ) : null}
     </div>

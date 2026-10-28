@@ -111,7 +111,7 @@ function VisitCard({ visit }: { visit: Visit }) {
           params={{ appointmentId: String(visit.id) }}
           className="inline-flex min-h-11 items-center rounded-full bg-spruce-deep px-4 text-sm text-surface"
         >
-          Open video
+          {visit.role === "counselor" ? "Join video" : "Open video"}
         </Link>
       ) : (
         <p className="text-sm text-muted">Cancelled. Life Booster may dismiss a counselor without notice, which cancels future visits.</p>
