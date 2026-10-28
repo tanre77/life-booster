@@ -35,7 +35,7 @@ function Directory() {
         <div className="max-w-2xl">
           <h1 className="font-display text-4xl">Counselors</h1>
           <p className="mt-2 text-muted">
-            Rates are for one hour. A visit can be 30, 60, 90, or 120 minutes, priced from that hour rate. Sample profiles let you practice the flow. They are not live people.
+            Rates are for one hour. A visit can be 30, 60, 90, or 120 minutes, priced from that hour rate.
           </p>
         </div>
         <div className="grid gap-3 md:grid-cols-2">

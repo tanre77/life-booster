@@ -27,13 +27,15 @@ function SessionPage() {
     );
   }
   if (!user) return <RedirectToSignIn />;
-  return (
-    <Shell>
-      {room.isLoading ? <p className="text-muted">Opening the room…</p> : null}
-      {room.isError ? <p className="text-clay">{room.error instanceof Error ? room.error.message : "Could not open this visit."}</p> : null}
-      {room.data ? <Room appointmentId={id} /> : null}
-    </Shell>
-  );
+  if (room.isLoading || !room.data) {
+    return (
+      <Shell>
+        {room.isLoading ? <p className="text-muted">Opening the room…</p> : null}
+        {room.isError ? <p className="text-clay">{room.error instanceof Error ? room.error.message : "Could not open this visit."}</p> : null}
+      </Shell>
+    );
+  }
+  return <Room appointmentId={id} />;
 }
 
 function Room({ appointmentId }: { appointmentId: number }) {
@@ -60,6 +62,7 @@ function Room({ appointmentId }: { appointmentId: number }) {
   const remaining = Math.max(0, end - now);
   const minutes = Math.floor(remaining / 60000);
   const seconds = Math.floor((remaining % 60000) / 1000);
+  const clock = remaining === 0 ? "Time is up" : `${minutes}:${String(seconds).padStart(2, "0")}`;
 
   async function send() {
     const text = body.trim();
@@ -70,22 +73,9 @@ function Room({ appointmentId }: { appointmentId: number }) {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+    <VideoStage appointmentId={appointmentId} role={data.role} title={data.otherName} timer={clock} sheet={
       <div className="space-y-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="text-sm text-muted">{data.sample ? "Sample practice room" : "Video visit"}</p>
-            <h1 className="font-display text-4xl">{data.otherName}</h1>
-          </div>
-          <p className="font-display text-3xl tabular-nums text-spruce-deep">
-            {remaining === 0 ? "Time is up" : `${minutes}:${String(seconds).padStart(2, "0")}`}
-          </p>
-        </div>
-        <VideoStage appointmentId={appointmentId} role={data.role} />
-        <p className="text-sm text-muted">{DISCLAIMER}</p>
-      </div>
-      <div className="space-y-4">
-        <section className="rounded-card border border-line bg-surface p-4">
+        <section>
           <h2 className="font-display text-xl">Shared notes</h2>
           {!data.shareMood ? (
             <p className="mt-2 text-sm text-muted">Mood notes were not shared for this visit.</p>
@@ -103,8 +93,9 @@ function Room({ appointmentId }: { appointmentId: number }) {
           ) : (
             <p className="mt-2 text-sm text-muted">Sharing is on, and there are no marked notes in this window.</p>
           )}
+          <p className="mt-3 text-sm text-muted">{DISCLAIMER}</p>
         </section>
-        <section className="flex h-[28rem] flex-col rounded-card border border-line bg-surface">
+        <section className="flex min-h-80 flex-col rounded-card border border-line bg-surface">
           <h2 className="px-4 pt-4 font-display text-xl">Messages</h2>
           <ul className="mt-2 flex-1 space-y-2 overflow-y-auto px-4">
             {messages.data?.map((message) => (
@@ -134,6 +125,6 @@ function Room({ appointmentId }: { appointmentId: number }) {
           </form>
         </section>
       </div>
-    </div>
+    } />
   );
 }

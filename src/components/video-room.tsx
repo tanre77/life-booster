@@ -1,20 +1,45 @@
-import { useEffect, useRef, useState } from "react";
-import { Mic, MicOff, Video, VideoOff } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { ArrowLeft, MessageSquare, Mic, MicOff, Video, VideoOff } from "lucide-react";
 import { listSignals, postSignal, touchPresence } from "@/lib/life/api";
 import { Button } from "@/components/shell";
 
-const PROMPTS = [
-  "How has this week felt, in one sentence?",
-  "What do you want a little more of in the next few days?",
-  "What would be useful to ask for?",
-];
+async function openCamera(): Promise<MediaStream> {
+  const attempts: MediaStreamConstraints[] = [
+    { video: { facingMode: "user" }, audio: true },
+    { video: true, audio: true },
+    { video: { facingMode: "user" }, audio: false },
+    { video: true, audio: false },
+  ];
+  let last: unknown;
+  for (const constraints of attempts) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (error) {
+      last = error;
+    }
+  }
+  throw last;
+}
+
+function attach(video: HTMLVideoElement | null, stream: MediaStream | null) {
+  if (!video) return;
+  video.srcObject = stream;
+  if (stream) void video.play().catch(() => undefined);
+}
 
 export function VideoStage({
   appointmentId,
   role,
+  title,
+  timer,
+  sheet,
 }: {
   appointmentId: number;
   role: "member" | "counselor" | "solo";
+  title: string;
+  timer: string;
+  sheet: ReactNode;
 }) {
   const localRef = useRef<HTMLVideoElement>(null);
   const remoteRef = useRef<HTMLVideoElement>(null);
@@ -23,16 +48,24 @@ export function VideoStage({
   const [cameraOn, setCameraOn] = useState(true);
   const [camNote, setCamNote] = useState<string | null>(null);
   const [phase, setPhase] = useState("Camera is off until you start.");
+  const [remoteLive, setRemoteLive] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
+  const navigate = useNavigate();
+
+  function leave() {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    void navigate({ to: "/visits" });
+  }
 
   useEffect(() => {
     if (!started) return;
     let stopped = false;
-    let timer = 0;
+    let timerId = 0;
     const solo = role === "solo";
     const pc = solo
       ? null
-      : new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+      : new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun.cloudflare.com:3478" }] });
     const pendingIce: RTCIceCandidateInit[] = [];
     let afterId = 0;
     let offered = false;
@@ -58,20 +91,27 @@ export function VideoStage({
     }
 
     async function boot() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        if (!stopped) {
+          setCamNote("This phone browser blocked the camera. Open the visit in Safari, then tap Start video.");
+          setPhase("Camera is unavailable here.");
+        }
+        return;
+      }
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const stream = await openCamera();
         if (stopped) {
           stream.getTracks().forEach((track) => track.stop());
           return;
         }
         streamRef.current = stream;
-        if (localRef.current) localRef.current.srcObject = stream;
+        attach(localRef.current, stream);
         stream.getTracks().forEach((track) => pc?.addTrack(track, stream));
-        setPhase(solo ? "Your camera is on. This sample guide is not a live person." : "Camera on.");
+        setPhase("Camera on. Your counselor will be joining soon.");
       } catch {
         if (!stopped) {
-          setCamNote("Camera and microphone stayed off. Messages and shared notes still work.");
-          setPhase(solo ? "Practice room, without a camera." : "Waiting without a camera.");
+          setCamNote("Camera and microphone stayed off. Allow them in the phone settings, then start again. Messages still work.");
+          setPhase("Waiting without a camera. Your counselor will be joining soon.");
         }
       }
     }
@@ -79,8 +119,11 @@ export function VideoStage({
     if (pc) {
       pc.ontrack = (event) => {
         const [stream] = event.streams;
-        if (remoteRef.current && stream) remoteRef.current.srcObject = stream;
-        setPhase("Picture connected.");
+        if (stream) {
+          attach(remoteRef.current, stream);
+          setRemoteLive(true);
+          setPhase("Picture connected.");
+        }
       };
       pc.onicecandidate = (event) => {
         if (!event.candidate) return;
@@ -135,20 +178,21 @@ export function VideoStage({
       } catch {
         /* signaling can retry on the next tick */
       }
-      if (!stopped) timer = window.setTimeout(() => void tick(), document.hidden ? 5000 : 1600);
+      if (!stopped) timerId = window.setTimeout(() => void tick(), document.hidden ? 5000 : 1600);
     }
 
     void boot();
     if (pc) void tick();
-    else setPhase("Practice room. A sample profile is not live on video.");
+    else setPhase("Your counselor will be joining soon.");
 
     return () => {
       stopped = true;
-      window.clearTimeout(timer);
+      window.clearTimeout(timerId);
       stopStream();
       pc?.close();
-      if (localRef.current) localRef.current.srcObject = null;
-      if (remoteRef.current) remoteRef.current.srcObject = null;
+      attach(localRef.current, null);
+      attach(remoteRef.current, null);
+      setRemoteLive(false);
     };
   }, [appointmentId, role, started]);
 
@@ -169,45 +213,76 @@ export function VideoStage({
   }
 
   return (
-    <div className="overflow-hidden rounded-card border border-line bg-spruce-deep text-surface">
-      <div className="relative aspect-[4/3] bg-ink sm:aspect-video">
-        {role !== "solo" ? (
-          <video ref={remoteRef} autoPlay playsInline className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full flex-col justify-end gap-2 p-4">
-            {PROMPTS.map((prompt) => (
-              <p key={prompt} className="max-w-sm text-sm text-surface/90">
-                {prompt}
-              </p>
-            ))}
+    <div className="fixed inset-0 z-30 bg-ink text-surface">
+      <video
+        ref={remoteRef}
+        autoPlay
+        playsInline
+        className={remoteLive ? "absolute inset-0 h-full w-full object-cover" : "hidden"}
+      />
+      <video
+        ref={localRef}
+        autoPlay
+        playsInline
+        muted
+        className={
+          remoteLive
+            ? "absolute right-4 z-10 h-40 w-28 -scale-x-100 rounded-2xl border border-surface/30 bg-ink object-cover shadow-lg"
+            : "absolute inset-0 h-full w-full -scale-x-100 object-cover"
+        }
+        style={remoteLive ? { bottom: "calc(env(safe-area-inset-bottom) + 6.5rem)" } : undefined}
+      />
+      <div
+        className="absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-3 bg-gradient-to-b from-ink/70 to-transparent px-4 pb-10"
+        style={{ paddingTop: "max(1rem, env(safe-area-inset-top))" }}
+      >
+        <div className="flex min-w-0 items-start gap-2">
+          <button
+            type="button"
+            onClick={leave}
+            className="mt-1 grid h-11 w-11 shrink-0 place-items-center rounded-full bg-surface/15 text-surface"
+            aria-label="Leave video"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <div className="min-w-0">
+            <p className="text-xs text-surface/75">Video visit</p>
+            <h1 className="truncate font-display text-3xl">{title}</h1>
+            <p className="text-sm text-surface/85">{camNote ?? phase}</p>
           </div>
-        )}
-        <video
-          ref={localRef}
-          autoPlay
-          playsInline
-          muted
-          className="absolute bottom-3 right-3 h-24 w-32 rounded-2xl border border-surface/30 bg-ink object-cover shadow-lg sm:h-28 sm:w-40"
-        />
-        {!started ? (
-          <div className="absolute inset-0 grid place-items-center bg-spruce-deep/80 p-4 text-center">
-            <div className="space-y-3">
-              <p className="text-sm text-surface/90">{phase}</p>
-              <Button type="button" variant="dark" className="bg-surface text-ink hover:bg-paper" onClick={() => setStarted(true)}>
-                Start video
-              </Button>
-            </div>
-          </div>
-        ) : null}
+        </div>
+        <p className="shrink-0 font-display text-3xl tabular-nums">{timer}</p>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-        <p className="text-sm text-surface/85">{camNote ?? phase}</p>
+      {!started ? (
+        <div className="absolute inset-0 z-20 grid place-items-center bg-spruce-deep/85 p-6 text-center">
+          <div className="max-w-xs space-y-3">
+            <p className="text-sm text-surface/90">
+              This will be a live person. Your counselor will be joining soon. Your camera starts when you tap.
+            </p>
+            <Button type="button" variant="dark" className="bg-surface text-ink hover:bg-paper" onClick={() => setStarted(true)}>
+              Start video
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      <div
+        className="absolute inset-x-0 bottom-0 z-10 flex items-center justify-between gap-3 bg-gradient-to-t from-ink/80 to-transparent px-4 pt-10"
+        style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
+      >
+        <button
+          type="button"
+          onClick={() => setSheetOpen(true)}
+          className="grid h-12 w-12 place-items-center rounded-full bg-surface/15 text-surface"
+          aria-label="Open messages and notes"
+        >
+          <MessageSquare className="h-5 w-5" />
+        </button>
         <div className="flex gap-2">
           <button
             type="button"
             onClick={toggleMute}
             disabled={!started}
-            className="grid h-11 w-11 place-items-center rounded-full bg-surface/15 text-surface disabled:opacity-40"
+            className="grid h-12 w-12 place-items-center rounded-full bg-surface/15 text-surface disabled:opacity-40"
             aria-label={muted ? "Unmute microphone" : "Mute microphone"}
           >
             {muted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
@@ -216,13 +291,34 @@ export function VideoStage({
             type="button"
             onClick={toggleCamera}
             disabled={!started}
-            className="grid h-11 w-11 place-items-center rounded-full bg-surface/15 text-surface disabled:opacity-40"
+            className="grid h-12 w-12 place-items-center rounded-full bg-surface/15 text-surface disabled:opacity-40"
             aria-label={cameraOn ? "Turn camera off" : "Turn camera on"}
           >
             {cameraOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
           </button>
         </div>
       </div>
+      {sheetOpen ? (
+        <div className="absolute inset-0 z-20 flex flex-col bg-paper text-ink">
+          <div
+            className="flex items-center justify-between border-b border-line px-4"
+            style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
+          >
+            <h2 className="py-3 font-display text-2xl">Notes and messages</h2>
+            <button
+              type="button"
+              onClick={() => setSheetOpen(false)}
+              className="grid h-11 w-11 place-items-center rounded-full"
+              aria-label="Back to video"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4" style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}>
+            {sheet}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

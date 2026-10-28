@@ -104,7 +104,7 @@ function BookCard({ counselorId, name, hourly }: { counselorId: string; name: st
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bookedId, setBookedId] = useState<number | null>(null);
-  const [hold, setHold] = useState<WalletMethod | null>(null);
+  const [holdNote, setHoldNote] = useState<string | null>(null);
 
   const slots = useQuery({
     queryKey: ["slots", counselorId, duration],
@@ -148,7 +148,7 @@ function BookCard({ counselorId, name, hourly }: { counselorId: string; name: st
         },
       });
       setBookedId(result.id);
-      setHold(null);
+      setHoldNote(payStatus === "demo_authorized" ? "No card was charged. Apple Pay and Google Pay charge only in the installed app." : null);
       await client.invalidateQueries({ queryKey: ["slots", counselorId] });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not book.");
@@ -171,7 +171,7 @@ function BookCard({ counselorId, name, hourly }: { counselorId: string; name: st
       await finish(method, "authorized");
       return;
     }
-    setHold(method);
+    await finish(method, "demo_authorized");
   }
 
   if (isPending) return <Panel>Checking your account…</Panel>;
@@ -193,6 +193,7 @@ function BookCard({ counselorId, name, hourly }: { counselorId: string; name: st
         <p className="text-sm text-muted">
           {formatMoney(price)} for {duration} minutes. Open the room when you are ready.
         </p>
+        {holdNote ? <p className="text-sm text-muted">{holdNote}</p> : null}
         <Link
           to="/session/$appointmentId"
           params={{ appointmentId: String(bookedId) }}
@@ -281,43 +282,27 @@ function BookCard({ counselorId, name, hourly }: { counselorId: string; name: st
           }}
           className="mt-1 h-5 w-5 accent-spruce"
         />
-        <span>Take 20% off by including a short sponsor. On iPhone and Android this spot can be filled by Google ads.</span>
+        <span>Take 20% off by including a short sponsor. On iPhone and Android this spot is filled by X Ads.</span>
       </label>
       {ads ? (
         <div className="rounded-2xl border border-dashed border-line bg-paper p-3 text-sm">
-          <p className="text-xs tracking-wide text-muted uppercase">Sponsored</p>
-          <p className="mt-1 font-medium">A quiet minute for a local bookstore.</p>
-          <p className="text-muted">{adLeft > 0 ? `Stay with this sponsor for ${adLeft}s to unlock the lower rate.` : "Sponsor finished. The lower rate is on."}</p>
+          <p className="text-xs tracking-wide text-muted uppercase">X Ads · Sponsored</p>
+          <p className="mt-1 font-medium">A quiet minute from a local bookstore.</p>
+          <p className="text-muted">{adLeft > 0 ? `Stay with this X Ad for ${adLeft}s to unlock the lower rate.` : "X Ad finished. The lower rate is on."}</p>
         </div>
       ) : null}
       <label className="flex items-start gap-3 text-sm">
         <input type="checkbox" checked={ack} onChange={(event) => setAck(event.target.checked)} className="mt-1 h-5 w-5 accent-spruce" />
         <span>{DISCLAIMER}</span>
       </label>
-      {hold ? (
-        <div className="space-y-2 rounded-2xl bg-paper p-3 text-sm">
-          <p>
-            {hold === "apple_pay" ? "Apple Pay" : "Google Pay"} is not available in this browser. Confirm a preview hold of {formatMoney(price)}? No card is charged. On iPhone and Android the same button opens the wallet.
-          </p>
-          <div className="flex gap-2">
-            <Button type="button" disabled={busy} onClick={() => void finish(hold, "demo_authorized")}>
-              {busy ? "Booking…" : "Confirm preview hold"}
-            </Button>
-            <Button type="button" variant="ghost" onClick={() => setHold(null)}>
-              Back
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="grid gap-2 sm:grid-cols-2">
-          <Button type="button" variant="dark" disabled={!slot || !ack || !adReady || busy} onClick={() => void pay("apple_pay")}>
-            Apple Pay
-          </Button>
-          <Button type="button" variant="ghost" disabled={!slot || !ack || !adReady || busy} onClick={() => void pay("google_pay")}>
-            Google Pay
-          </Button>
-        </div>
-      )}
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Button type="button" variant="dark" disabled={!slot || !ack || !adReady || busy} onClick={() => void pay("apple_pay")}>
+          {busy ? "Booking…" : "Apple Pay"}
+        </Button>
+        <Button type="button" variant="ghost" disabled={!slot || !ack || !adReady || busy} onClick={() => void pay("google_pay")}>
+          {busy ? "Booking…" : "Google Pay"}
+        </Button>
+      </div>
       {error ? <p className="text-sm text-clay">{error}</p> : null}
     </Panel>
   );

@@ -43,6 +43,7 @@ export async function requestWallet(opts: {
               merchantCapabilities: ["supports3DS"],
               supportedNetworks: ["visa", "masterCard", "amex", "discover"],
               countryCode: "US",
+              currencyCode: "USD",
             },
           },
         ];
@@ -50,11 +51,10 @@ export async function requestWallet(opts: {
     const request = new PaymentRequest(methodData, {
       total: { label: opts.label, amount: { currency: "USD", value } },
     });
-    if (request.canMakePayment) {
-      const can = await request.canMakePayment();
-      if (!can) return "unavailable";
-    }
-    await request.show();
+    // show() has to stay inside the tap. Awaiting canMakePayment() first
+    // drops the user gesture on iPhone, so the Apple Pay sheet never opens.
+    const response = await request.show();
+    await response.complete("success");
     return "authorized";
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") return "cancelled";
