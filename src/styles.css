@@ -18,6 +18,19 @@
   html {
     background: var(--color-paper);
     color: var(--color-ink);
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+    --color-paper: #121614;
+    --color-surface: #1c2420;
+    --color-ink: #f3efe6;
+    --color-muted: #b7c0b8;
+    --color-line: #31403a;
+    --color-spruce: #3eae90;
+    --color-spruce-deep: #9edbc8;
+    --color-clay: #e08a68;
   }
 
   body {
@@ -47,7 +60,12 @@
 
   ::selection {
     background: #d5ebe3;
-    color: var(--color-ink);
+    color: #143f35;
+  }
+
+  html.dark ::selection {
+    background: #1e6b58;
+    color: #f3efe6;
   }
 }
 

@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Panel, Shell, fieldClass } from "@/components/shell";
 import { UserButton } from "@/lib/auth/gates";
 import { RedirectToSignIn } from "@/lib/auth/gates";
@@ -8,8 +8,49 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getDashboard, saveDisplayName } from "@/lib/life/api";
 import { DISCLAIMER } from "@/lib/life/catalog";
 import { localYMD } from "@/lib/life/time";
+import { applyTheme, readThemeChoice, type ThemeChoice } from "@/lib/theme";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/you")({ component: YouPage });
+
+function ThemeSwitch() {
+  const [choice, setChoice] = useState<ThemeChoice>("system");
+  useEffect(() => {
+    setChoice(readThemeChoice());
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => {
+      if (readThemeChoice() === "system") applyTheme("system");
+    };
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, []);
+  const options: { id: ThemeChoice; label: string }[] = [
+    { id: "light", label: "Light" },
+    { id: "dark", label: "Dark" },
+    { id: "system", label: "Match device" },
+  ];
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {options.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          aria-pressed={choice === option.id}
+          onClick={() => {
+            applyTheme(option.id);
+            setChoice(option.id);
+          }}
+          className={cn(
+            "min-h-11 rounded-full border text-sm",
+            choice === option.id ? "border-spruce-deep bg-spruce-deep text-surface" : "border-line bg-paper text-ink",
+          )}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function YouPage() {
   const { user, isPending } = useCurrentUserState();
@@ -40,6 +81,10 @@ function YouPage() {
     <Shell>
       <div className="mx-auto max-w-xl space-y-5">
         <h1 className="font-display text-4xl">You</h1>
+        <Panel className="space-y-3">
+          <h2 className="font-display text-2xl">Appearance</h2>
+          <ThemeSwitch />
+        </Panel>
         <Panel className="space-y-3">
           <UserButton />
           <p className="text-sm text-muted">{user.primaryEmail}</p>

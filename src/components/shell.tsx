@@ -16,9 +16,9 @@ export function Mark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" aria-hidden="true" className={className}>
       <rect width="32" height="32" rx="10" fill="currentColor" />
-      <circle cx="16" cy="13" r="5" fill="#fffdf8" />
+      <circle cx="16" cy="13" r="5" fill="var(--color-paper)" />
       <circle cx="16" cy="13" r="2" fill="#c4623e" />
-      <path d="M6 24c3.2-4 6.4-6 10-6s6.8 2 10 6" fill="none" stroke="#fffdf8" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M6 24c3.2-4 6.4-6 10-6s6.8 2 10 6" fill="none" stroke="var(--color-paper)" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
