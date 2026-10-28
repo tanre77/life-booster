@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { Button, Panel, Shell, fieldClass } from "@/components/shell";
-import { GROK_PROVIDERS, authClient, signIn } from "@/lib/auth/client";
+import { GROK_PROVIDERS, authClient, captureSessionToken, signIn } from "@/lib/auth/client";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 
@@ -23,6 +23,11 @@ function LoginPage() {
     event.preventDefault();
     setBusy(true);
     setError(null);
+    const fetchOptions = {
+      onSuccess(context: { response: Response }) {
+        captureSessionToken(context.response.headers);
+      },
+    };
     const result =
       mode === "up"
         ? await authClient.signUp.email({
@@ -30,14 +35,30 @@ function LoginPage() {
             password,
             name: name.trim() || email.split("@")[0] || "Member",
             callbackURL: "/",
+            fetchOptions,
           })
-        : await authClient.signIn.email({ email, password, callbackURL: "/" });
+        : await authClient.signIn.email({ email, password, callbackURL: "/", fetchOptions });
     setBusy(false);
     if (result.error) {
-      setError(result.error.message ?? "Could not sign in.");
+      setError(result.error.message ?? (mode === "up" ? "Could not create the account." : "Could not sign in."));
       return;
     }
+    try {
+      await authClient.getSession();
+    } catch {
+      /* the stored token is enough for the next page */
+    }
     await navigate({ to: "/" });
+  }
+
+  async function onProvider(providerId: string) {
+    setError(null);
+    try {
+      await signIn(providerId, { callbackURL: "/" });
+      await navigate({ to: "/" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not sign in.");
+    }
   }
 
   return (
@@ -54,7 +75,7 @@ function LoginPage() {
               type="button"
               variant="ghost"
               className="w-full"
-              onClick={() => void signIn(provider.providerId, { callbackURL: "/" })}
+              onClick={() => void onProvider(provider.providerId)}
             >
               Continue with {provider.label}
             </Button>

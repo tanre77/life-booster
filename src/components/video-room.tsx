@@ -417,22 +417,22 @@ export function VideoStage({
         </div>
       </div>
       {sheetOpen ? (
-        <div className="absolute inset-0 z-20 flex flex-col bg-paper text-ink">
+        <div className="absolute inset-0 z-40 flex flex-col bg-paper text-ink">
           <div
-            className="flex items-center justify-between border-b border-line px-4"
+            className="flex items-center gap-2 border-b border-line px-3"
             style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
           >
-            <h2 className="py-3 font-display text-2xl">Notes and messages</h2>
             <button
               type="button"
               onClick={() => setSheetOpen(false)}
-              className="grid h-11 w-11 place-items-center rounded-full"
-              aria-label="Back to video"
+              className="inline-flex min-h-11 items-center gap-1 rounded-full px-2 text-sm font-medium"
             >
               <ArrowLeft className="h-5 w-5" />
+              Back to video
             </button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4" style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}>
+            <h2 className="font-display text-3xl">Notes and messages</h2>
             <label className="mb-4 block text-sm">
               <span className="font-medium">Your notes</span>
               <textarea
@@ -447,8 +447,12 @@ export function VideoStage({
         </div>
       ) : null}
       {ended ? (
-        <div className="absolute inset-0 z-40 overflow-y-auto bg-paper px-4 py-6 text-ink" style={{ paddingTop: "max(1.5rem, env(safe-area-inset-top))" }}>
-          <h2 className="font-display text-4xl">Visit notes</h2>
+        <div className="absolute inset-0 z-50 overflow-y-auto bg-paper px-4 py-6 text-ink" style={{ paddingTop: "max(1.5rem, env(safe-area-inset-top))" }}>
+          <button type="button" onClick={leave} className="inline-flex min-h-11 items-center gap-1 text-sm font-medium">
+            <ArrowLeft className="h-5 w-5" />
+            Back to visits
+          </button>
+          <h2 className="mt-3 font-display text-4xl">Visit notes</h2>
           <p className="mt-2 text-sm text-muted">Saved from this visit. Nothing here is sent unless you share it.</p>
           <section className="mt-5">
             <h3 className="font-display text-2xl">Your notes</h3>
@@ -462,9 +466,6 @@ export function VideoStage({
             <p className="mt-5 text-sm text-muted">The recording will appear here when the file is ready.</p>
           ) : null}
           <div className="mt-6">{sheet}</div>
-          <button type="button" onClick={leave} className="mt-6 inline-flex min-h-11 items-center rounded-full border border-line px-4 text-sm">
-            Back to visits
-          </button>
         </div>
       ) : null}
     </div>

@@ -67,6 +67,12 @@ function setBearerToken(token: string | null): void {
   }
 }
 
+/** Keep the session token from an email sign-in. Preview iframes cannot use the cookie. */
+export function captureSessionToken(headers: Headers) {
+  const token = headers.get("set-auth-token");
+  if (token) setBearerToken(token);
+}
+
 /**
  * The sandbox live preview runs this app inside an iframe on a `*.grok-sandbox.com`
  * host, where a full-page redirect to the broker can't work — so sign-in uses a
