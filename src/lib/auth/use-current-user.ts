@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { authClient, authEnabled } from "./client";
 
 /** Normalized user shape used across the app, auth on or off. */
@@ -65,6 +65,15 @@ export function useCurrentUserState(): CurrentUserState {
 
 function useSessionUserState(): CurrentUserState {
   const { data, isPending } = authClient.useSession();
+  const [timedOut, setTimedOut] = useState(false);
+  useEffect(() => {
+    if (!isPending) {
+      setTimedOut(false);
+      return;
+    }
+    const id = window.setTimeout(() => setTimedOut(true), 2000);
+    return () => window.clearTimeout(id);
+  }, [isPending]);
   const id = data?.user.id;
   const displayName = data?.user.name ?? null;
   const primaryEmail = data?.user.email ?? null;
@@ -73,7 +82,7 @@ function useSessionUserState(): CurrentUserState {
     () => (id ? { id, displayName, primaryEmail, profileImageUrl, isDevFallback: false } : null),
     [id, displayName, primaryEmail, profileImageUrl],
   );
-  return useMemo(() => ({ user, isPending }), [user, isPending]);
+  return useMemo(() => ({ user, isPending: isPending && !timedOut }), [user, isPending, timedOut]);
 }
 
 /**

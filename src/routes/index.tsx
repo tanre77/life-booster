@@ -14,10 +14,10 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/")({ component: Home });
 
 function Home() {
-  const { user, isPending } = useCurrentUserState();
+  const { user } = useCurrentUserState();
   return (
     <Shell>
-      {isPending ? <p className="text-muted">Opening your week…</p> : user ? <Today name={user.displayName ?? ""} /> : <Landing />}
+      {user ? <Today name={user.displayName ?? ""} /> : <Landing />}
     </Shell>
   );
 }
