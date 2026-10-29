@@ -50,16 +50,21 @@ function Directory() {
   const people = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const filter = topic || specialty;
-    return (query.data ?? []).filter((person) => {
-      if (followingOnly && !followed.has(person.id)) return false;
-      if (needle && !`${person.displayName} ${person.headline} ${person.bio}`.toLowerCase().includes(needle)) return false;
-      if (filter && !person.specialties.includes(filter)) return false;
-      if (religion && !person.religions.includes(religion)) return false;
-      if (philosophy && !person.philosophies.includes(philosophy)) return false;
-      if (maxRate && person.hourlyRateCents > maxRate) return false;
-      return true;
-    });
-  }, [query.data, q, topic, specialty, religion, philosophy, maxRate, followingOnly, followed]);
+    const byPractice = new Set(
+      (practices.data ?? []).filter((item) => !filter || item.topic === filter).map((item) => item.counselorId),
+    );
+    return (query.data ?? [])
+      .filter((person) => {
+        if (followingOnly && !followed.has(person.id)) return false;
+        if (needle && !`${person.displayName} ${person.headline} ${person.bio}`.toLowerCase().includes(needle)) return false;
+        if (filter && !person.specialties.includes(filter) && !byPractice.has(person.id)) return false;
+        if (religion && !person.religions.includes(religion)) return false;
+        if (philosophy && !person.philosophies.includes(philosophy)) return false;
+        if (maxRate && person.hourlyRateCents > maxRate) return false;
+        return true;
+      })
+      .sort((a, b) => Number(b.openNow) - Number(a.openNow) || Number(b.hours.length > 0) - Number(a.hours.length > 0) || a.displayName.localeCompare(b.displayName));
+  }, [query.data, practices.data, q, topic, specialty, religion, philosophy, maxRate, followingOnly, followed]);
 
   const tracks = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -114,11 +119,17 @@ function Directory() {
                   params={{ practiceId: String(item.id) }}
                   className="lift rounded-card border border-line bg-surface p-4 hover:-translate-y-0.5"
                 >
-                  <p className="text-xs text-spruce">{item.topic}</p>
-                  <p className="mt-1 font-medium">{item.title}</p>
-                  <p className="text-sm text-muted">
-                    {item.minutes} min · {item.counselorName}
-                  </p>
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-spruce-deep text-sm font-medium text-surface">
+                      {item.counselorName.slice(0, 1).toUpperCase()}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="font-medium">{item.title}</p>
+                      <p className="text-sm text-muted">
+                        {item.counselorName} · {item.minutes} min · {item.topic}
+                      </p>
+                    </div>
+                  </div>
                 </Link>
               ))}
             </div>
@@ -172,6 +183,7 @@ function Directory() {
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {person.openNow ? <span className="rounded-full bg-spruce-deep px-2 py-1 text-xs text-surface">Open now</span> : null}
+                  {!person.hours.length ? <span className="rounded-full bg-paper px-2 py-1 text-xs text-muted">Hours not set</span> : null}
                   {person.specialties.slice(0, 3).map((item) => (
                     <span key={item} className="rounded-full bg-paper px-2 py-1 text-xs text-muted">
                       {item}
@@ -197,7 +209,7 @@ function Directory() {
           </div>
           {!query.isLoading && people.length === 0 ? (
             <Panel>
-              <p>No counselors match. A counselor appears after they save hours in Studio.</p>
+              <p>No counselors yet. Publish a bio in Studio and this list fills in. Hours are only needed to take bookings.</p>
             </Panel>
           ) : null}
         </section>

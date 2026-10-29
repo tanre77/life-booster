@@ -119,7 +119,7 @@ async function loadDirectory(includeDismissed: boolean) {
   }
   return rows
     .filter((row) => !row.user_id.startsWith("sample-"))
-    .filter((row) => includeDismissed || (row.standing === "active" && (hours.get(row.user_id)?.length ?? 0) > 0))
+    .filter((row) => includeDismissed || row.standing === "active")
     .map((row) => {
       const stat = stats.get(row.user_id);
       const rating = stat && stat.count ? Math.round((stat.sum / stat.count) * 10) / 10 : 0;
