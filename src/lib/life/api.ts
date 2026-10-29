@@ -93,6 +93,7 @@ async function loadDirectory(includeDismissed: boolean) {
     stats.set(review.counselor_id, current);
   }
   return rows
+    .filter((row) => !row.user_id.startsWith("sample-"))
     .filter((row) => includeDismissed || (row.standing === "active" && (hours.get(row.user_id)?.length ?? 0) > 0))
     .map((row) => {
       const stat = stats.get(row.user_id);
