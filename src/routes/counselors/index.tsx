@@ -3,7 +3,8 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Stars } from "@/components/stars";
 import { Panel, Shell } from "@/components/shell";
-import { listCounselors } from "@/lib/life/api";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { listCounselors, listVisits } from "@/lib/life/api";
 import { PHILOSOPHIES, RELIGIONS, SPECIALTIES } from "@/lib/life/catalog";
 import { formatMoney } from "@/lib/life/money";
 import { cn } from "@/lib/utils";
@@ -11,7 +12,27 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/counselors/")({ component: Directory });
 
 function Directory() {
+  const { user } = useCurrentUserState();
   const query = useQuery({ queryKey: ["counselors"], queryFn: () => listCounselors() });
+  const visits = useQuery({ queryKey: ["visits"], queryFn: () => listVisits(), enabled: Boolean(user) });
+  const scheduled = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const visit of visits.data ?? []) {
+      if (visit.role !== "member" || visit.status === "cancelled") continue;
+      if (new Date(visit.startsAt).getTime() < Date.now() - 60 * 60 * 1000) continue;
+      map.set(
+        visit.otherId,
+        new Date(visit.startsAt).toLocaleString(undefined, {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }),
+      );
+    }
+    return map;
+  }, [visits.data]);
   const [q, setQ] = useState("");
   const [specialty, setSpecialty] = useState("");
   const [religion, setReligion] = useState("");
@@ -101,6 +122,12 @@ function Directory() {
                   {person.rating ? person.rating.toFixed(1) : "New"} · {person.reviewCount}
                 </span>
               </div>
+              {person.hours.length ? (
+                <p className="mt-3 text-sm text-ink">{person.hours.slice(0, 3).join(" · ")}</p>
+              ) : null}
+              {scheduled.get(person.id) ? (
+                <p className="mt-2 text-sm font-medium text-spruce-deep">Scheduled · {scheduled.get(person.id)}</p>
+              ) : null}
             </Link>
           ))}
         </div>

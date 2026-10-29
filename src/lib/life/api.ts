@@ -4,7 +4,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { filterProfanity } from "@/lib/life/profanity";
 import { sessionPriceCents, MIN_HOURLY_CENTS, MAX_HOURLY_CENTS } from "@/lib/life/money";
-import { asIso, buildSlots, type Block } from "@/lib/life/time";
+import { asIso, buildSlots, minutesToHHMM, WEEKDAY_LABELS, type Block } from "@/lib/life/time";
 import type { CounselorCard, Dashboard, ReviewItem, SessionRoom, Visit } from "@/lib/life/types";
 
 function tags(value: unknown): string[] {
@@ -37,10 +37,11 @@ type CounselorRow = {
   specialties: string;
   hourly_rate_cents: number;
   timezone: string;
+  venmo_handle: string;
   standing: string;
 };
 
-function cardFrom(row: CounselorRow, rating: number, reviewCount: number): CounselorCard {
+function cardFrom(row: CounselorRow, rating: number, reviewCount: number, hours: string[] = []): CounselorCard {
   return {
     id: row.user_id,
     displayName: row.display_name,
@@ -51,10 +52,12 @@ function cardFrom(row: CounselorRow, rating: number, reviewCount: number): Couns
     specialties: tags(row.specialties),
     hourlyRateCents: num(row.hourly_rate_cents),
     timezone: row.timezone,
+    venmoHandle: row.venmo_handle || "",
     standing: row.standing === "dismissed" ? "dismissed" : "active",
     sample: row.user_id.startsWith("sample-"),
     rating,
     reviewCount,
+    hours,
   };
 }
 
@@ -63,14 +66,25 @@ async function loadDirectory(includeDismissed: boolean) {
   const [rows, reviewRows, hourRows] = await Promise.all([
     sql<CounselorRow>`
       select user_id, display_name, headline, bio, religions, philosophies, specialties,
-             hourly_rate_cents, timezone, standing
+             hourly_rate_cents, timezone, venmo_handle, standing
       from counselor_profiles
       order by display_name
     `,
     sql<{ counselor_id: string; stars: number }>`select counselor_id, stars from reviews`,
-    sql<{ counselor_id: string }>`select distinct counselor_id from availability_blocks`,
+    sql<{ counselor_id: string; weekday: number; start_min: number; end_min: number }>`
+      select counselor_id, weekday, start_min, end_min
+      from availability_blocks
+      order by weekday, start_min
+    `,
   ]);
-  const withHours = new Set(hourRows.map((row) => row.counselor_id));
+  const hours = new Map<string, string[]>();
+  for (const row of hourRows) {
+    const id = row.counselor_id;
+    const line = `${WEEKDAY_LABELS[num(row.weekday)]?.slice(0, 3) ?? ""} ${minutesToHHMM(num(row.start_min))}–${minutesToHHMM(num(row.end_min))}`;
+    const list = hours.get(id) ?? [];
+    list.push(line);
+    hours.set(id, list);
+  }
   const stats = new Map<string, { sum: number; count: number }>();
   for (const review of reviewRows) {
     const current = stats.get(review.counselor_id) ?? { sum: 0, count: 0 };
@@ -79,11 +93,11 @@ async function loadDirectory(includeDismissed: boolean) {
     stats.set(review.counselor_id, current);
   }
   return rows
-    .filter((row) => includeDismissed || (row.standing === "active" && withHours.has(row.user_id)))
+    .filter((row) => includeDismissed || (row.standing === "active" && (hours.get(row.user_id)?.length ?? 0) > 0))
     .map((row) => {
       const stat = stats.get(row.user_id);
       const rating = stat && stat.count ? Math.round((stat.sum / stat.count) * 10) / 10 : 0;
-      return cardFrom(row, rating, stat?.count ?? 0);
+      return cardFrom(row, rating, stat?.count ?? 0, hours.get(row.user_id) ?? []);
     });
 }
 
@@ -360,6 +374,7 @@ const bioSchema = z.object({
   specialties: tagList,
   hourlyDollars: z.number().min(15).max(400),
   timezone: z.string().trim().min(1).max(80),
+  venmoHandle: z.string().trim().max(30).optional(),
 });
 
 function cleanTags(list: string[]): string[] {
@@ -385,6 +400,7 @@ export const saveCounselorBio = createServerFn({ method: "POST" })
       throw new Error("Add at least one religion, one philosophy, and one specialty.");
     }
     const cents = Math.round(data.hourlyDollars * 100);
+    const venmo = (data.venmoHandle ?? "").trim().replace(/^@/, "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 30);
     if (cents < MIN_HOURLY_CENTS || cents > MAX_HOURLY_CENTS) {
       throw new Error("Set an hourly rate between $15 and $400.");
     }
@@ -399,11 +415,11 @@ export const saveCounselorBio = createServerFn({ method: "POST" })
     await sql`
       insert into counselor_profiles (
         user_id, display_name, headline, bio, religions, philosophies, specialties,
-        hourly_rate_cents, timezone
+        hourly_rate_cents, timezone, venmo_handle
       ) values (
         ${context.userId}, ${data.displayName}, ${data.headline}, ${data.bio},
         ${JSON.stringify(religions)}, ${JSON.stringify(philosophies)}, ${JSON.stringify(specialties)},
-        ${cents}, ${data.timezone}
+        ${cents}, ${data.timezone}, ${venmo}
       )
       on conflict (user_id) do update set
         display_name = excluded.display_name,
@@ -413,7 +429,8 @@ export const saveCounselorBio = createServerFn({ method: "POST" })
         philosophies = excluded.philosophies,
         specialties = excluded.specialties,
         hourly_rate_cents = excluded.hourly_rate_cents,
-        timezone = excluded.timezone
+        timezone = excluded.timezone,
+        venmo_handle = excluded.venmo_handle
     `;
     return { ok: true as const };
   });
@@ -424,7 +441,7 @@ export const getMyCounselor = createServerFn({ method: "GET" })
     const sql = await getSql();
     const rows = await sql<CounselorRow>`
       select user_id, display_name, headline, bio, religions, philosophies, specialties,
-             hourly_rate_cents, timezone, standing
+             hourly_rate_cents, timezone, venmo_handle, standing
       from counselor_profiles where user_id = ${context.userId}
     `;
     const row = rows[0];
@@ -450,8 +467,8 @@ const blocksSchema = z.object({
     .array(
       z.object({
         weekday: z.number().int().min(0).max(6),
-        startMin: z.number().int().min(0).max(1410),
-        endMin: z.number().int().min(30).max(1440),
+        startMin: z.number().int().min(0).max(1440),
+        endMin: z.number().int().min(0).max(1440),
       }),
     )
     .max(21),
@@ -470,13 +487,18 @@ export const saveAvailability = createServerFn({ method: "POST" })
       throw new Error("This profile was dismissed. New hours cannot be opened.");
     }
     const seen = new Set<string>();
-    const clean = data.blocks.filter((block) => {
-      if (block.endMin <= block.startMin || block.startMin % 30 !== 0 || block.endMin % 30 !== 0) return false;
-      const key = `${block.weekday}:${block.startMin}`;
-      if (seen.has(key)) return false;
+    const clean = data.blocks.flatMap((block) => {
+      let startMin = Math.round(block.startMin / 30) * 30;
+      let endMin = Math.round(block.endMin / 30) * 30;
+      startMin = Math.min(1410, Math.max(0, startMin));
+      endMin = Math.min(1440, Math.max(0, endMin));
+      if (endMin <= startMin) return [];
+      const key = `${block.weekday}:${startMin}`;
+      if (seen.has(key)) return [];
       seen.add(key);
-      return true;
+      return [{ weekday: block.weekday, startMin, endMin }];
     });
+    if (!clean.length) throw new Error("Add an hour window with an end time after the start.");
     const perDay = new Map<number, number>();
     for (const block of clean) perDay.set(block.weekday, (perDay.get(block.weekday) ?? 0) + 1);
     if ([...perDay.values()].some((count) => count > 3)) {
@@ -499,7 +521,7 @@ const bookSchema = z.object({
   shareMood: z.boolean(),
   adsOptIn: z.boolean(),
   disclaimerAck: z.literal(true),
-  payMethod: z.enum(["apple_pay", "google_pay"]),
+  payMethod: z.enum(["google_pay", "venmo"]),
   payStatus: z.enum(["authorized", "demo_authorized"]),
 });
 

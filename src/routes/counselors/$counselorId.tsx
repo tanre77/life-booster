@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Stars } from "@/components/stars";
 import { Button, Panel, Shell } from "@/components/shell";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { bookAppointment, getCounselor, listSlots } from "@/lib/life/api";
+import { bookAppointment, getCounselor, listSlots, listVisits } from "@/lib/life/api";
 import { DISCLAIMER } from "@/lib/life/catalog";
 import { DURATIONS, formatMoney, hoursLabel, sessionPriceCents, type DurationMin } from "@/lib/life/money";
 import { labelDate, labelTime } from "@/lib/life/time";
@@ -69,7 +69,7 @@ function CounselorPage() {
               )}
             </section>
           </article>
-          <BookCard counselorId={person.id} name={person.displayName} hourly={person.hourlyRateCents} />
+          <BookCard counselorId={person.id} name={person.displayName} hourly={person.hourlyRateCents} venmoHandle={person.venmoHandle} />
         </div>
       ) : null}
     </Shell>
@@ -91,7 +91,7 @@ function TagGroup({ title, items }: { title: string; items: string[] }) {
   );
 }
 
-function BookCard({ counselorId, name, hourly }: { counselorId: string; name: string; hourly: number }) {
+function BookCard({ counselorId, name, hourly, venmoHandle }: { counselorId: string; name: string; hourly: number; venmoHandle: string }) {
   const { user, isPending } = useCurrentUserState();
   const client = useQueryClient();
   const [duration, setDuration] = useState<DurationMin>(60);
@@ -106,6 +106,14 @@ function BookCard({ counselorId, name, hourly }: { counselorId: string; name: st
   const [bookedId, setBookedId] = useState<number | null>(null);
   const [holdNote, setHoldNote] = useState<string | null>(null);
 
+  const visits = useQuery({
+    queryKey: ["visits"],
+    queryFn: () => listVisits(),
+    enabled: Boolean(user),
+  });
+  const already = visits.data?.find(
+    (visit) => visit.role === "member" && visit.otherId === counselorId && visit.status !== "cancelled" && new Date(visit.startsAt).getTime() > Date.now() - 60 * 60 * 1000,
+  );
   const slots = useQuery({
     queryKey: ["slots", counselorId, duration],
     queryFn: () => listSlots({ data: { counselorId, durationMin: duration } }),
@@ -130,7 +138,7 @@ function BookCard({ counselorId, name, hourly }: { counselorId: string; name: st
     return () => window.clearInterval(timer);
   }, [ads]);
 
-  async function finish(method: WalletMethod, payStatus: "authorized" | "demo_authorized") {
+  async function finish(method: "google_pay" | "venmo", payStatus: "authorized" | "demo_authorized") {
     if (!slot) return;
     setBusy(true);
     setError(null);
@@ -148,8 +156,16 @@ function BookCard({ counselorId, name, hourly }: { counselorId: string; name: st
         },
       });
       setBookedId(result.id);
-      setHoldNote(payStatus === "demo_authorized" ? "No card was charged. Apple Pay and Google Pay charge only in the installed app." : null);
+      setHoldNote(
+        method === "venmo"
+          ? "The visit is on the schedule. Finish sending the amount in Venmo."
+          : payStatus === "demo_authorized"
+            ? "No card was charged. Google Pay charges only in the installed app."
+            : null,
+      );
       await client.invalidateQueries({ queryKey: ["slots", counselorId] });
+      await client.invalidateQueries({ queryKey: ["visits"] });
+      await client.invalidateQueries({ queryKey: ["dashboard"] });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not book.");
     } finally {
@@ -168,10 +184,10 @@ function BookCard({ counselorId, name, hourly }: { counselorId: string; name: st
     });
     if (outcome === "cancelled") return;
     if (outcome === "authorized") {
-      await finish(method, "authorized");
+      await finish("google_pay", "authorized");
       return;
     }
-    await finish(method, "demo_authorized");
+    await finish("google_pay", "demo_authorized");
   }
 
   if (isPending) return <Panel>Checking your account…</Panel>;
@@ -179,24 +195,34 @@ function BookCard({ counselorId, name, hourly }: { counselorId: string; name: st
     return (
       <Panel className="space-y-3 lg:sticky lg:top-20">
         <h2 className="font-display text-2xl">Book a visit</h2>
-        <p className="text-sm text-muted">Sign in to choose a time and pay with Apple Pay or Google Pay.</p>
+        <p className="text-sm text-muted">Sign in to choose a time and pay with Venmo or Google Pay.</p>
         <Link to="/login" className="inline-flex min-h-11 items-center rounded-full bg-spruce-deep px-4 text-sm text-surface">
           Sign in
         </Link>
       </Panel>
     );
   }
-  if (bookedId) {
+  if (bookedId || already) {
+    const when = already
+      ? new Date(already.startsAt).toLocaleString(undefined, {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        })
+      : null;
     return (
       <Panel className="space-y-3">
-        <h2 className="font-display text-2xl">You are booked</h2>
+        <h2 className="font-display text-2xl">Scheduled</h2>
         <p className="text-sm text-muted">
-          {formatMoney(price)} for {duration} minutes. Open the room when you are ready.
+          {when ? `${when} · ` : ""}
+          {formatMoney(already?.amountCents ?? price)} for {already?.durationMin ?? duration} minutes.
         </p>
         {holdNote ? <p className="text-sm text-muted">{holdNote}</p> : null}
         <Link
           to="/session/$appointmentId"
-          params={{ appointmentId: String(bookedId) }}
+          params={{ appointmentId: String(bookedId ?? already?.id) }}
           className="inline-flex min-h-11 items-center rounded-full bg-spruce-deep px-4 text-sm text-surface"
         >
           Go to the visit
@@ -296,8 +322,22 @@ function BookCard({ counselorId, name, hourly }: { counselorId: string; name: st
         <span>{DISCLAIMER}</span>
       </label>
       <div className="grid gap-2 sm:grid-cols-2">
-        <Button type="button" variant="dark" disabled={!slot || !ack || !adReady || busy} onClick={() => void pay("apple_pay")}>
-          {busy ? "Booking…" : "Apple Pay"}
+        <Button
+          type="button"
+          variant="dark"
+          disabled={!slot || !ack || !adReady || busy || !venmoHandle}
+          onClick={() => {
+            const amount = (price / 100).toFixed(2);
+            const note = `${duration} min visit with ${name}`;
+            window.open(
+              `https://venmo.com/?txn=pay&audience=private&recipients=${encodeURIComponent(venmoHandle)}&amount=${amount}&note=${encodeURIComponent(note)}`,
+              "_blank",
+              "noopener,noreferrer",
+            );
+            void finish("venmo", "demo_authorized");
+          }}
+        >
+          {busy ? "Booking…" : venmoHandle ? `Venmo @${venmoHandle}` : "Venmo not connected"}
         </Button>
         <Button type="button" variant="ghost" disabled={!slot || !ack || !adReady || busy} onClick={() => void pay("google_pay")}>
           {busy ? "Booking…" : "Google Pay"}

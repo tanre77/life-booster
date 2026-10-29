@@ -8,10 +8,12 @@ export type CounselorCard = {
   specialties: string[];
   hourlyRateCents: number;
   timezone: string;
+  venmoHandle: string;
   standing: "active" | "dismissed";
   sample: boolean;
   rating: number;
   reviewCount: number;
+  hours: string[];
 };
 
 export type ReviewItem = {

@@ -66,7 +66,7 @@ function VisitCard({ visit }: { visit: Visit }) {
     minute: "2-digit",
   });
   const pay =
-    visit.payMethod === "apple_pay" ? "Apple Pay" : visit.payMethod === "google_pay" ? "Google Pay" : visit.payMethod;
+    visit.payMethod === "venmo" ? "Venmo" : visit.payMethod === "google_pay" ? "Google Pay" : visit.payMethod;
 
   async function onReview() {
     if (!stars) {

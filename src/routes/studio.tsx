@@ -7,7 +7,7 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getMyCounselor, saveAvailability, saveCounselorBio } from "@/lib/life/api";
 import { PHILOSOPHIES, RELIGIONS, SPECIALTIES } from "@/lib/life/catalog";
 import { formatMoney } from "@/lib/life/money";
-import { WEEKDAY_LABELS, minutesToHHMM } from "@/lib/life/time";
+import { WEEKDAY_LABELS, hhmmToMinutes, minutesToHHMM } from "@/lib/life/time";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/studio")({ component: StudioPage });
@@ -42,6 +42,7 @@ function Studio() {
   const [specialties, setSpecialties] = useState<string[]>([]);
   const [dollars, setDollars] = useState("80");
   const [timezone, setTimezone] = useState("America/New_York");
+  const [venmo, setVenmo] = useState("");
   const [blocks, setBlocks] = useState<DraftBlock[]>([]);
   const [ready, setReady] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -49,7 +50,7 @@ function Studio() {
   const client = useQueryClient();
 
   useEffect(() => {
-    if (query.isLoading || ready) return;
+    if (!query.isSuccess || ready) return;
     if (profile) {
       setDisplayName(profile.displayName);
       setHeadline(profile.headline);
@@ -59,6 +60,7 @@ function Studio() {
       setSpecialties(profile.specialties);
       setDollars(String(Math.round(profile.hourlyRateCents / 100)));
       setTimezone(profile.timezone);
+      setVenmo(profile.venmoHandle ?? "");
       setBlocks(
         profile.blocks.map((block) => ({
           weekday: block.weekday,
@@ -71,7 +73,7 @@ function Studio() {
       if (zone) setTimezone(zone);
     }
     setReady(true);
-  }, [query.isLoading, profile, ready]);
+  }, [query.isSuccess, profile, ready]);
 
   function toggle(list: string[], value: string, set: (next: string[]) => void) {
     set(list.includes(value) ? list.filter((item) => item !== value) : [...list, value].slice(0, 8));
@@ -92,10 +94,12 @@ function Studio() {
           specialties,
           hourlyDollars: Number(dollars),
           timezone,
+          venmoHandle: venmo,
         },
       });
       setStatus("Bio saved. Add hours so people can book you.");
       await client.invalidateQueries({ queryKey: ["my-counselor"] });
+      await client.invalidateQueries({ queryKey: ["counselors"] });
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not save.");
     } finally {
@@ -106,21 +110,25 @@ function Studio() {
   async function saveHours() {
     setBusy(true);
     setStatus(null);
+    const parsed = blocks.flatMap((block) => {
+      const startMin = hhmmToMinutes(block.start);
+      const endMin = hhmmToMinutes(block.end);
+      if (startMin == null || endMin == null || endMin <= startMin) return [];
+      return [{ weekday: block.weekday, startMin, endMin }];
+    });
+    if (!parsed.length) {
+      setStatus("Add a window with an end time after the start, then save hours.");
+      setBusy(false);
+      return;
+    }
     try {
-      await saveAvailability({
-        data: {
-          blocks: blocks.flatMap((block) => {
-            const [sh, sm] = block.start.split(":").map(Number);
-            const [eh, em] = block.end.split(":").map(Number);
-            return [{ weekday: block.weekday, startMin: sh * 60 + sm, endMin: eh * 60 + em }];
-          }),
-        },
-      });
-      setStatus("Hours saved.");
+      await saveAvailability({ data: { blocks: parsed } });
+      setStatus("Hours saved. You are on the counselor list.");
       await client.invalidateQueries({ queryKey: ["my-counselor"] });
       await client.invalidateQueries({ queryKey: ["counselors"] });
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not save hours.");
+      const message = error instanceof Error ? error.message : "Could not save hours.";
+      setStatus(message);
     } finally {
       setBusy(false);
     }
@@ -166,6 +174,18 @@ function Studio() {
               className={fieldClass}
             />
             <span className="mt-1 block text-muted">{formatMoney(Math.round(Number(dollars || 0) * 100))} per hour</span>
+          </label>
+          <label className="text-sm">
+            <span className="text-muted">Venmo username</span>
+            <input
+              value={venmo}
+              onChange={(event) => setVenmo(event.target.value)}
+              placeholder="yourname"
+              className={fieldClass}
+              autoCapitalize="none"
+              autoCorrect="off"
+            />
+            <span className="mt-1 block text-muted">The name in your Venmo link, without the @. Payments open to that account.</span>
           </label>
           <label className="text-sm">
             <span className="text-muted">Timezone for your hours</span>
@@ -225,7 +245,8 @@ function Studio() {
         </Button>
         {!profile ? <p className="text-sm text-muted">Save a bio before hours.</p> : null}
       </Panel>
-      {status ? <p className="text-sm text-muted">{status}</p> : null}
+        {query.isError ? <p className="text-sm text-clay">{query.error instanceof Error ? query.error.message : "Studio did not load."}</p> : null}
+        {status ? <p className="text-sm text-muted">{status}</p> : null}
     </div>
   );
 }

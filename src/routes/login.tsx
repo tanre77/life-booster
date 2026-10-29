@@ -80,6 +80,7 @@ function LoginPage() {
               Continue with {provider.label}
             </Button>
           ))}
+          <p className="text-sm text-muted">Apple ID is not offered here. The sign-in service only accepts Google and X. Use one of those, or create an account with email.</p>
         </Panel>
         <form onSubmit={(event) => void onSubmit(event)} className="space-y-3">
           <div className="flex gap-2">

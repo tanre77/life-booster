@@ -90,11 +90,11 @@ export function minutesToHHMM(min: number): string {
 }
 
 export function hhmmToMinutes(value: string): number | null {
-  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(value.trim());
   if (!match) return null;
   const h = Number(match[1]);
   const m = Number(match[2]);
-  if (h > 23 || m > 59 || m % 30 !== 0) return null;
+  if (h > 23 || m > 59) return null;
   return h * 60 + m;
 }
 
