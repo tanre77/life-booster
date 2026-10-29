@@ -17,6 +17,7 @@ import { Route as VisitsRouteImport } from './routes/visits'
 import { Route as YouRouteImport } from './routes/you'
 import { Route as CounselorsIndexRouteImport } from './routes/counselors/index'
 import { Route as CounselorsCounselorIdRouteImport } from './routes/counselors/$counselorId'
+import { Route as PracticePracticeIdRouteImport } from './routes/practice/$practiceId'
 import { Route as SessionAppointmentIdRouteImport } from './routes/session/$appointmentId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
@@ -60,6 +61,11 @@ const CounselorsCounselorIdRoute = CounselorsCounselorIdRouteImport.update({
   path: '/counselors/$counselorId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PracticePracticeIdRoute = PracticePracticeIdRouteImport.update({
+  id: '/practice/$practiceId',
+  path: '/practice/$practiceId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SessionAppointmentIdRoute = SessionAppointmentIdRouteImport.update({
   id: '/session/$appointmentId',
   path: '/session/$appointmentId',
@@ -79,6 +85,7 @@ export interface FileRoutesByFullPath {
   '/visits': typeof VisitsRoute
   '/you': typeof YouRoute
   '/counselors/$counselorId': typeof CounselorsCounselorIdRoute
+  '/practice/$practiceId': typeof PracticePracticeIdRoute
   '/session/$appointmentId': typeof SessionAppointmentIdRoute
   '/counselors/': typeof CounselorsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -91,6 +98,7 @@ export interface FileRoutesByTo {
   '/visits': typeof VisitsRoute
   '/you': typeof YouRoute
   '/counselors/$counselorId': typeof CounselorsCounselorIdRoute
+  '/practice/$practiceId': typeof PracticePracticeIdRoute
   '/session/$appointmentId': typeof SessionAppointmentIdRoute
   '/counselors': typeof CounselorsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -104,6 +112,7 @@ export interface FileRoutesById {
   '/visits': typeof VisitsRoute
   '/you': typeof YouRoute
   '/counselors/$counselorId': typeof CounselorsCounselorIdRoute
+  '/practice/$practiceId': typeof PracticePracticeIdRoute
   '/session/$appointmentId': typeof SessionAppointmentIdRoute
   '/counselors/': typeof CounselorsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -118,6 +127,7 @@ export interface FileRouteTypes {
     | '/visits'
     | '/you'
     | '/counselors/$counselorId'
+    | '/practice/$practiceId'
     | '/session/$appointmentId'
     | '/counselors/'
     | '/api/auth/$'
@@ -130,6 +140,7 @@ export interface FileRouteTypes {
     | '/visits'
     | '/you'
     | '/counselors/$counselorId'
+    | '/practice/$practiceId'
     | '/session/$appointmentId'
     | '/counselors'
     | '/api/auth/$'
@@ -142,6 +153,7 @@ export interface FileRouteTypes {
     | '/visits'
     | '/you'
     | '/counselors/$counselorId'
+    | '/practice/$practiceId'
     | '/session/$appointmentId'
     | '/counselors/'
     | '/api/auth/$'
@@ -155,6 +167,7 @@ export interface RootRouteChildren {
   VisitsRoute: typeof VisitsRoute
   YouRoute: typeof YouRoute
   CounselorsCounselorIdRoute: typeof CounselorsCounselorIdRoute
+  PracticePracticeIdRoute: typeof PracticePracticeIdRoute
   SessionAppointmentIdRoute: typeof SessionAppointmentIdRoute
   CounselorsIndexRoute: typeof CounselorsIndexRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -218,6 +231,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CounselorsCounselorIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/practice/$practiceId': {
+      id: '/practice/$practiceId'
+      path: '/practice/$practiceId'
+      fullPath: '/practice/$practiceId'
+      preLoaderRoute: typeof PracticePracticeIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/session/$appointmentId': {
       id: '/session/$appointmentId'
       path: '/session/$appointmentId'
@@ -243,6 +263,7 @@ const rootRouteChildren: RootRouteChildren = {
   VisitsRoute: VisitsRoute,
   YouRoute: YouRoute,
   CounselorsCounselorIdRoute: CounselorsCounselorIdRoute,
+  PracticePracticeIdRoute: PracticePracticeIdRoute,
   SessionAppointmentIdRoute: SessionAppointmentIdRoute,
   CounselorsIndexRoute: CounselorsIndexRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,

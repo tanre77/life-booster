@@ -4,7 +4,7 @@ import { useEffect, useState, type Dispatch, type FormEvent, type SetStateAction
 import { Button, Panel, Shell, fieldClass } from "@/components/shell";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { getMyCounselor, saveAvailability, saveCounselorBio } from "@/lib/life/api";
+import { deletePractice, getMyCounselor, listMyPractices, saveAvailability, saveCounselorBio, savePractice } from "@/lib/life/api";
 import { PHILOSOPHIES, RELIGIONS, SPECIALTIES } from "@/lib/life/catalog";
 import { formatMoney } from "@/lib/life/money";
 import { WEEKDAY_LABELS, hhmmToMinutes, minutesToHHMM } from "@/lib/life/time";
@@ -247,7 +247,89 @@ function Studio() {
       </Panel>
         {query.isError ? <p className="text-sm text-clay">{query.error instanceof Error ? query.error.message : "Studio did not load."}</p> : null}
         {status ? <p className="text-sm text-muted">{status}</p> : null}
+      {profile ? <Practices /> : null}
     </div>
+  );
+}
+
+function Practices() {
+  const client = useQueryClient();
+  const mine = useQuery({ queryKey: ["my-practices"], queryFn: () => listMyPractices() });
+  const [title, setTitle] = useState("");
+  const [topic, setTopic] = useState("Stress");
+  const [minutes, setMinutes] = useState("10");
+  const [body, setBody] = useState("");
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function add(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setNote(null);
+    try {
+      await savePractice({
+        data: { title: title.trim(), topic, minutes: Number(minutes), body: body.trim() },
+      });
+      setTitle("");
+      setBody("");
+      await client.invalidateQueries({ queryKey: ["my-practices"] });
+      await client.invalidateQueries({ queryKey: ["practices"] });
+      setNote("Practice is in the library.");
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : "Could not save the practice.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: number) {
+    await deletePractice({ data: { id } });
+    await client.invalidateQueries({ queryKey: ["my-practices"] });
+    await client.invalidateQueries({ queryKey: ["practices"] });
+  }
+
+  return (
+    <Panel className="space-y-3">
+      <h2 className="font-display text-2xl">Practices</h2>
+      <p className="text-sm text-muted">A short written sit people can start from the library, the way a teacher publishes a track.</p>
+      <ul className="space-y-2">
+        {mine.data?.map((item) => (
+          <li key={item.id} className="flex items-start justify-between gap-3 rounded-2xl border border-line bg-paper px-3 py-2">
+            <div>
+              <p className="font-medium">{item.title}</p>
+              <p className="text-sm text-muted">
+                {item.topic} · {item.minutes} min
+              </p>
+            </div>
+            <button type="button" className="text-sm text-clay" onClick={() => void remove(item.id)}>
+              Remove
+            </button>
+          </li>
+        ))}
+      </ul>
+      <form onSubmit={(event) => void add(event)} className="grid gap-2">
+        <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Title" className={fieldClass} maxLength={80} required />
+        <div className="grid grid-cols-2 gap-2">
+          <select value={topic} onChange={(event) => setTopic(event.target.value)} className={fieldClass}>
+            {SPECIALTIES.map((item) => (
+              <option key={item}>{item}</option>
+            ))}
+          </select>
+          <select value={minutes} onChange={(event) => setMinutes(event.target.value)} className={fieldClass}>
+            {[5, 10, 15, 20, 30].map((item) => (
+              <option key={item} value={item}>
+                {item} min
+              </option>
+            ))}
+          </select>
+        </div>
+        <textarea value={body} onChange={(event) => setBody(event.target.value)} rows={4} maxLength={2000} placeholder="What to do in the sit" className={`${fieldClass} py-3`} />
+        <Button type="submit" disabled={busy}>
+          {busy ? "Saving…" : "Publish practice"}
+        </Button>
+        {note ? <p className="text-sm text-muted">{note}</p> : null}
+      </form>
+    </Panel>
   );
 }
 

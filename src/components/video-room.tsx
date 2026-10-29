@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, MessageSquare, Mic, MicOff, Video, VideoOff } from "lucide-react";
+import { ArrowLeft, MessageSquare, Mic, MicOff, Video, VideoOff, Volume2 } from "lucide-react";
 import { listSignals, postSignal, touchPresence } from "@/lib/life/api";
 import { Button } from "@/components/shell";
 
 async function openCamera(): Promise<MediaStream> {
+  const audio = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
   const attempts: MediaStreamConstraints[] = [
-    { video: { facingMode: "user" }, audio: true },
+    { video: { facingMode: "user" }, audio },
     { video: true, audio: true },
+    { audio: true },
     { video: { facingMode: "user" }, audio: false },
     { video: true, audio: false },
   ];
@@ -22,9 +24,19 @@ async function openCamera(): Promise<MediaStream> {
   throw last;
 }
 
-function attach(video: HTMLVideoElement | null, stream: MediaStream | null) {
+function attach(video: HTMLVideoElement | HTMLAudioElement | null, stream: MediaStream | null) {
   if (!video) return;
   video.srcObject = stream;
+  if (video instanceof HTMLVideoElement) {
+    video.muted = video.hasAttribute("data-local");
+    video.playsInline = true;
+    video.setAttribute("playsinline", "true");
+    video.setAttribute("webkit-playsinline", "true");
+  }
+  if (video instanceof HTMLAudioElement) {
+    video.muted = false;
+    video.volume = 1;
+  }
   if (stream) void video.play().catch(() => undefined);
 }
 
@@ -43,6 +55,8 @@ export function VideoStage({
 }) {
   const localRef = useRef<HTMLVideoElement>(null);
   const remoteRef = useRef<HTMLVideoElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
+  const [hearBlocked, setHearBlocked] = useState(false);
   const [started, setStarted] = useState(false);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -121,6 +135,11 @@ export function VideoStage({
   }, [remoteLive, startedAt]);
 
   useEffect(() => {
+    if (!remoteLive) return;
+    hearThem();
+  }, [remoteLive]);
+
+  useEffect(() => {
     if (!recordWanted || !remoteLive || !started || recording || recordingUrl || ended) return;
     beginRecording();
   }, [recordWanted, remoteLive, started, recording, recordingUrl, ended]);
@@ -192,7 +211,14 @@ export function VideoStage({
         }
         streamRef.current = stream;
         attach(localRef.current, stream);
-        stream.getTracks().forEach((track) => pc?.addTrack(track, stream));
+        const audioTracks = stream.getAudioTracks();
+        if (!audioTracks.length) {
+          setCamNote("Microphone is off. Allow the mic in iPhone settings, then start again.");
+        }
+        stream.getTracks().forEach((track) => {
+          track.enabled = true;
+          pc?.addTrack(track, stream);
+        });
         setPhase(role === "counselor" ? "Camera on. Waiting for the member to join." : "Camera on. Your counselor will be joining soon.");
       } catch {
         if (!stopped) {
@@ -205,13 +231,18 @@ export function VideoStage({
 
     if (pc) {
       pc.ontrack = (event) => {
-        const [stream] = event.streams;
-        if (stream) {
-          remoteStreamRef.current = stream;
-          attach(remoteRef.current, stream);
-          setRemoteLive(true);
-          setPhase(role === "counselor" ? "The member is here. The visit timer is running." : "Your counselor is here. The visit timer is running.");
+        const stream = event.streams[0] ?? new MediaStream([event.track]);
+        remoteStreamRef.current = stream;
+        attach(remoteRef.current, stream);
+        const audio = remoteAudioRef.current;
+        if (audio) {
+          audio.srcObject = stream;
+          audio.muted = false;
+          audio.volume = 1;
+          void audio.play().then(() => setHearBlocked(false)).catch(() => setHearBlocked(true));
         }
+        setRemoteLive(true);
+        setPhase(role === "counselor" ? "The member is here. The visit timer is running." : "Your counselor is here. The visit timer is running.");
       };
       pc.onicecandidate = (event) => {
         if (!event.candidate) return;
@@ -303,6 +334,14 @@ export function VideoStage({
     setMuted(next);
   }
 
+  function hearThem() {
+    const audio = remoteAudioRef.current;
+    if (!audio) return;
+    audio.muted = false;
+    audio.volume = 1;
+    void audio.play().then(() => setHearBlocked(false)).catch(() => setHearBlocked(true));
+  }
+
   function toggleCamera() {
     const next = !cameraOn;
     streamRef.current?.getVideoTracks().forEach((track) => {
@@ -317,13 +356,16 @@ export function VideoStage({
         ref={remoteRef}
         autoPlay
         playsInline
-        className={remoteLive ? "absolute inset-0 h-full w-full object-cover" : "hidden"}
+        muted
+        className={remoteLive ? "absolute inset-0 h-full w-full object-cover" : "absolute h-px w-px opacity-0"}
       />
+      <audio ref={remoteAudioRef} autoPlay playsInline />
       <video
         ref={localRef}
         autoPlay
         playsInline
         muted
+        data-local="true"
         className={
           remoteLive
             ? "absolute right-4 z-10 h-40 w-28 -scale-x-100 rounded-2xl border border-surface/30 bg-ink object-cover shadow-lg"
@@ -376,7 +418,10 @@ export function VideoStage({
               type="button"
               variant="dark"
               className="bg-surface text-ink hover:bg-paper"
-              onClick={() => setStarted(true)}
+              onClick={() => {
+                setStarted(true);
+                hearThem();
+              }}
             >
               {role === "counselor" ? "Join video" : "Start video"}
             </Button>
@@ -405,6 +450,16 @@ export function VideoStage({
           >
             {muted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
           </button>
+          {hearBlocked ? (
+            <button
+              type="button"
+              onClick={hearThem}
+              className="inline-flex h-12 items-center gap-2 rounded-full bg-surface px-4 text-sm font-medium text-ink"
+            >
+              <Volume2 className="h-5 w-5" />
+              Tap to hear
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={toggleCamera}

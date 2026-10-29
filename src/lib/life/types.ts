@@ -14,8 +14,18 @@ export type CounselorCard = {
   rating: number;
   reviewCount: number;
   hours: string[];
+  openNow: boolean;
 };
 
+export type Practice = {
+  id: number;
+  counselorId: string;
+  counselorName: string;
+  title: string;
+  topic: string;
+  minutes: number;
+  body: string;
+};
 export type ReviewItem = {
   id: number;
   stars: number;
@@ -28,6 +38,14 @@ export type MoodEntry = {
   loggedOn: string;
   mood: number;
   note: string;
+  shareWithCounselors: boolean;
+};
+
+export type Medication = {
+  id: number;
+  name: string;
+  dose: string;
+  taken: string;
   shareWithCounselors: boolean;
 };
 
@@ -57,6 +75,7 @@ export type Dashboard = {
     hasHours: boolean;
   } | null;
   moods: MoodEntry[];
+  medications: Medication[];
   upcoming: Visit | null;
 };
 
@@ -71,4 +90,5 @@ export type SessionRoom = {
   counselorName: string;
   sample: boolean;
   notes: { loggedOn: string; mood: number; note: string }[];
+  medications: { name: string; dose: string; taken: string }[];
 };

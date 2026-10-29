@@ -62,20 +62,39 @@ function Room({ appointmentId, data }: { appointmentId: number; data: SessionRoo
         <section>
           <h2 className="font-display text-xl">Shared notes</h2>
           {!data.shareMood ? (
-            <p className="mt-2 text-sm text-muted">Mood notes were not shared for this visit.</p>
-          ) : data.notes.length ? (
-            <ul className="mt-3 space-y-3">
-              {data.notes.map((note) => (
-                <li key={note.loggedOn}>
-                  <p className="text-sm text-muted">
-                    {note.loggedOn} · {MOODS.find((mood) => mood.value === note.mood)?.label}
-                  </p>
-                  <p className="text-sm">{note.note}</p>
-                </li>
-              ))}
-            </ul>
+            <p className="mt-2 text-sm text-muted">Mood notes and medications were not shared for this visit.</p>
           ) : (
-            <p className="mt-2 text-sm text-muted">Sharing is on, and there are no marked notes in this window.</p>
+            <>
+              {data.medications.length ? (
+                <ul className="mt-3 space-y-2">
+                  <li className="text-sm text-muted">Medications they marked to share</li>
+                  {data.medications.map((item) => (
+                    <li key={item.name + item.dose + item.taken} className="text-sm">
+                      <span className="font-medium">{item.name}</span>
+                      {[item.dose, item.taken].filter(Boolean).length ? (
+                        <span className="text-muted"> · {[item.dose, item.taken].filter(Boolean).join(" · ")}</span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-2 text-sm text-muted">No medications were marked to share.</p>
+              )}
+              {data.notes.length ? (
+                <ul className="mt-3 space-y-3">
+                  {data.notes.map((note) => (
+                    <li key={note.loggedOn}>
+                      <p className="text-sm text-muted">
+                        {note.loggedOn} · {MOODS.find((mood) => mood.value === note.mood)?.label}
+                      </p>
+                      <p className="text-sm">{note.note}</p>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-2 text-sm text-muted">Sharing is on, and there are no marked notes in this window.</p>
+              )}
+            </>
           )}
           <p className="mt-3 text-sm text-muted">{DISCLAIMER}</p>
         </section>

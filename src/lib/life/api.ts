@@ -5,7 +5,7 @@ import { getSql } from "@/lib/db";
 import { filterProfanity } from "@/lib/life/profanity";
 import { sessionPriceCents, MIN_HOURLY_CENTS, MAX_HOURLY_CENTS } from "@/lib/life/money";
 import { asIso, buildSlots, minutesToHHMM, WEEKDAY_LABELS, type Block } from "@/lib/life/time";
-import type { CounselorCard, Dashboard, ReviewItem, SessionRoom, Visit } from "@/lib/life/types";
+import type { CounselorCard, Dashboard, Practice, ReviewItem, SessionRoom, Visit } from "@/lib/life/types";
 
 function tags(value: unknown): string[] {
   if (typeof value !== "string") return [];
@@ -41,7 +41,7 @@ type CounselorRow = {
   standing: string;
 };
 
-function cardFrom(row: CounselorRow, rating: number, reviewCount: number, hours: string[] = []): CounselorCard {
+function cardFrom(row: CounselorRow, rating: number, reviewCount: number, hours: string[] = [], openNow = false): CounselorCard {
   return {
     id: row.user_id,
     displayName: row.display_name,
@@ -58,7 +58,28 @@ function cardFrom(row: CounselorRow, rating: number, reviewCount: number, hours:
     rating,
     reviewCount,
     hours,
+    openNow,
   };
+}
+
+function isOpenNow(timezone: string, blocks: { weekday: number; startMin: number; endMin: number }[]): boolean {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone || "America/New_York",
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date());
+    const bag: Record<string, string> = {};
+    for (const part of parts) if (part.type !== "literal") bag[part.type] = part.value;
+    const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(bag.weekday ?? "");
+    const minute = Number(bag.hour) * 60 + Number(bag.minute);
+    if (weekday < 0 || Number.isNaN(minute)) return false;
+    return blocks.some((block) => block.weekday === weekday && minute >= block.startMin && minute < block.endMin);
+  } catch {
+    return false;
+  }
 }
 
 async function loadDirectory(includeDismissed: boolean) {
@@ -78,12 +99,16 @@ async function loadDirectory(includeDismissed: boolean) {
     `,
   ]);
   const hours = new Map<string, string[]>();
+  const blocksBy = new Map<string, { weekday: number; startMin: number; endMin: number }[]>();
   for (const row of hourRows) {
     const id = row.counselor_id;
     const line = `${WEEKDAY_LABELS[num(row.weekday)]?.slice(0, 3) ?? ""} ${minutesToHHMM(num(row.start_min))}–${minutesToHHMM(num(row.end_min))}`;
     const list = hours.get(id) ?? [];
     list.push(line);
     hours.set(id, list);
+    const blocks = blocksBy.get(id) ?? [];
+    blocks.push({ weekday: num(row.weekday), startMin: num(row.start_min), endMin: num(row.end_min) });
+    blocksBy.set(id, blocks);
   }
   const stats = new Map<string, { sum: number; count: number }>();
   for (const review of reviewRows) {
@@ -98,7 +123,7 @@ async function loadDirectory(includeDismissed: boolean) {
     .map((row) => {
       const stat = stats.get(row.user_id);
       const rating = stat && stat.count ? Math.round((stat.sum / stat.count) * 10) / 10 : 0;
-      return cardFrom(row, rating, stat?.count ?? 0, hours.get(row.user_id) ?? []);
+      return cardFrom(row, rating, stat?.count ?? 0, hours.get(row.user_id) ?? [], isOpenNow(row.timezone, blocksBy.get(row.user_id) ?? []));
     });
 }
 
@@ -110,6 +135,172 @@ export const listCounselors = createServerFn({ method: "GET" }).handler(async ()
   return loadDirectory(false);
 });
 
+function practiceFrom(row: {
+  id: number;
+  counselor_id: string;
+  counselor_name: string;
+  title: string;
+  topic: string;
+  minutes: number;
+  body: string;
+}): Practice {
+  return {
+    id: num(row.id),
+    counselorId: row.counselor_id,
+    counselorName: row.counselor_name,
+    title: row.title,
+    topic: row.topic,
+    minutes: num(row.minutes),
+    body: row.body,
+  };
+}
+
+export const listPractices = createServerFn({ method: "GET" })
+  .validator((input: { topic?: string } | undefined) =>
+    z.object({ topic: z.string().max(40).optional() }).parse(input ?? {}),
+  )
+  .handler(async ({ data }): Promise<Practice[]> => {
+    const sql = await getSql();
+    const rows = await sql<{
+      id: number;
+      counselor_id: string;
+      counselor_name: string;
+      title: string;
+      topic: string;
+      minutes: number;
+      body: string;
+    }>`
+      select p.id, p.counselor_id, c.display_name as counselor_name, p.title, p.topic, p.minutes, p.body
+      from practices p
+      join counselor_profiles c on c.user_id = p.counselor_id
+      where c.standing = 'active'
+        and c.user_id not like 'sample-%'
+        and (${data.topic ?? ""} = '' or p.topic = ${data.topic ?? ""})
+      order by p.created_at desc
+      limit 80
+    `;
+    return rows.map(practiceFrom);
+  });
+
+export const getPractice = createServerFn({ method: "GET" })
+  .validator((input: { id: number }) => z.object({ id: z.number().int().positive() }).parse(input))
+  .handler(async ({ data }): Promise<Practice | null> => {
+    const sql = await getSql();
+    const rows = await sql<{
+      id: number;
+      counselor_id: string;
+      counselor_name: string;
+      title: string;
+      topic: string;
+      minutes: number;
+      body: string;
+    }>`
+      select p.id, p.counselor_id, c.display_name as counselor_name, p.title, p.topic, p.minutes, p.body
+      from practices p
+      join counselor_profiles c on c.user_id = p.counselor_id
+      where p.id = ${data.id} and c.standing = 'active' and c.user_id not like 'sample-%'
+    `;
+    return rows[0] ? practiceFrom(rows[0]) : null;
+  });
+
+const practiceSchema = z.object({
+  id: z.number().int().positive().optional(),
+  title: z.string().trim().min(1).max(80),
+  topic: z.string().trim().min(1).max(40),
+  minutes: z.number().int().min(1).max(60),
+  body: z.string().trim().max(2000),
+});
+
+export const savePractice = createServerFn({ method: "POST" })
+  .validator((input: z.infer<typeof practiceSchema>) => practiceSchema.parse(input))
+  .middleware([authMiddleware])
+  .handler(async ({ data, context }) => {
+    const sql = await getSql();
+    const mine = await sql<{ user_id: string }>`
+      select user_id from counselor_profiles where user_id = ${context.userId} and standing = 'active'
+    `;
+    if (!mine[0]) throw new Error("Publish a counselor bio before adding a practice.");
+    if (data.id) {
+      const rows = await sql<{ id: number }>`
+        update practices
+        set title = ${data.title}, topic = ${data.topic}, minutes = ${data.minutes}, body = ${data.body}
+        where id = ${data.id} and counselor_id = ${context.userId}
+        returning id
+      `;
+      if (!rows[0]) throw new Error("That practice is not yours.");
+      return { id: num(rows[0].id) };
+    }
+    const count = await sql<{ n: number }>`select count(*) as n from practices where counselor_id = ${context.userId}`;
+    if (num(count[0]?.n) >= 20) throw new Error("Keep the list to 20 practices.");
+    const rows = await sql<{ id: number }>`
+      insert into practices (counselor_id, title, topic, minutes, body)
+      values (${context.userId}, ${data.title}, ${data.topic}, ${data.minutes}, ${data.body})
+      returning id
+    `;
+    return { id: num(rows[0].id) };
+  });
+
+export const deletePractice = createServerFn({ method: "POST" })
+  .validator((input: { id: number }) => z.object({ id: z.number().int().positive() }).parse(input))
+  .middleware([authMiddleware])
+  .handler(async ({ data, context }) => {
+    const sql = await getSql();
+    await sql`delete from practices where id = ${data.id} and counselor_id = ${context.userId}`;
+    return { ok: true as const };
+  });
+
+export const listMyPractices = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }): Promise<Practice[]> => {
+    const sql = await getSql();
+    const rows = await sql<{
+      id: number;
+      counselor_id: string;
+      counselor_name: string;
+      title: string;
+      topic: string;
+      minutes: number;
+      body: string;
+    }>`
+      select p.id, p.counselor_id, c.display_name as counselor_name, p.title, p.topic, p.minutes, p.body
+      from practices p
+      join counselor_profiles c on c.user_id = p.counselor_id
+      where p.counselor_id = ${context.userId}
+      order by p.created_at desc
+    `;
+    return rows.map(practiceFrom);
+  });
+
+export const followCounselor = createServerFn({ method: "POST" })
+  .validator((input: { id: string; follow: boolean }) =>
+    z.object({ id: z.string().min(1).max(80), follow: z.boolean() }).parse(input),
+  )
+  .middleware([authMiddleware])
+  .handler(async ({ data, context }) => {
+    if (data.id === context.userId) throw new Error("You cannot follow yourself.");
+    const sql = await getSql();
+    if (data.follow) {
+      await sql`
+        insert into follows (user_id, counselor_id)
+        values (${context.userId}, ${data.id})
+        on conflict do nothing
+      `;
+    } else {
+      await sql`delete from follows where user_id = ${context.userId} and counselor_id = ${data.id}`;
+    }
+    return { ok: true as const };
+  });
+
+export const listFollows = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }): Promise<string[]> => {
+    const sql = await getSql();
+    const rows = await sql<{ counselor_id: string }>`
+      select counselor_id from follows where user_id = ${context.userId}
+    `;
+    return rows.map((row) => row.counselor_id);
+  });
+
 export const getCounselor = createServerFn({ method: "GET" })
   .validator((input: { id: string }) => z.object({ id: z.string().min(1).max(80) }).parse(input))
   .handler(async ({ data }) => {
@@ -117,19 +308,36 @@ export const getCounselor = createServerFn({ method: "GET" })
     const counselor = cards.find((item) => item.id === data.id);
     if (!counselor || counselor.standing !== "active") return null;
     const sql = await getSql();
-    const reviews = await sql<{
-      id: number;
-      stars: number;
-      comment: string;
-      reviewer_name: string;
-      created_at: unknown;
-    }>`
-      select id, stars, comment, reviewer_name, created_at
-      from reviews
-      where counselor_id = ${data.id}
-      order by created_at desc
-      limit 40
-    `;
+    const [reviews, practices] = await Promise.all([
+      sql<{
+        id: number;
+        stars: number;
+        comment: string;
+        reviewer_name: string;
+        created_at: unknown;
+      }>`
+        select id, stars, comment, reviewer_name, created_at
+        from reviews
+        where counselor_id = ${data.id}
+        order by created_at desc
+        limit 40
+      `,
+      sql<{
+        id: number;
+        counselor_id: string;
+        counselor_name: string;
+        title: string;
+        topic: string;
+        minutes: number;
+        body: string;
+      }>`
+        select p.id, p.counselor_id, c.display_name as counselor_name, p.title, p.topic, p.minutes, p.body
+        from practices p
+        join counselor_profiles c on c.user_id = p.counselor_id
+        where p.counselor_id = ${data.id}
+        order by p.created_at desc
+      `,
+    ]);
     const items: ReviewItem[] = reviews.map((row) => ({
       id: num(row.id),
       stars: num(row.stars),
@@ -137,7 +345,7 @@ export const getCounselor = createServerFn({ method: "GET" })
       reviewerName: row.reviewer_name,
       createdAt: asIso(row.created_at),
     }));
-    return { counselor, reviews: items };
+    return { counselor, reviews: items, practices: practices.map(practiceFrom) };
   });
 
 const slotsSchema = z.object({
@@ -205,7 +413,7 @@ export const getDashboard = createServerFn({ method: "GET" })
     const profile = await ensureProfile(context.userId, data.suggestedName ?? "");
     const sql = await getSql();
     const start = shiftDate(data.today, -6);
-    const [moods, counselorRows, hourRows, deskRows, upcomingMember, upcomingHost] = await Promise.all([
+    const [moods, meds, counselorRows, hourRows, deskRows, upcomingMember, upcomingHost] = await Promise.all([
       sql<{ logged_on: string; mood: number; note: string; share_with_counselors: boolean }>`
         select logged_on::text as logged_on, mood, note, share_with_counselors
         from mood_entries
@@ -213,6 +421,12 @@ export const getDashboard = createServerFn({ method: "GET" })
           and logged_on >= ${start}::date
           and logged_on <= ${data.today}::date
         order by logged_on
+      `,
+      sql<{ id: number; name: string; dose: string; taken: string; share_with_counselors: boolean }>`
+        select id, name, dose, taken, share_with_counselors
+        from medications
+        where user_id = ${context.userId}
+        order by name, id
       `,
       sql<{ headline: string; hourly_rate_cents: number; standing: string }>`
         select headline, hourly_rate_cents, standing
@@ -264,9 +478,16 @@ export const getDashboard = createServerFn({ method: "GET" })
           }
         : null,
       moods: moods.map((row) => ({
-        loggedOn: String(row.logged_on).slice(0, 10),
+        loggedOn: ymd(row.logged_on),
         mood: num(row.mood),
         note: row.note,
+        shareWithCounselors: bool(row.share_with_counselors),
+      })),
+      medications: meds.map((row) => ({
+        id: num(row.id),
+        name: row.name,
+        dose: row.dose,
+        taken: row.taken,
         shareWithCounselors: bool(row.share_with_counselors),
       })),
       upcoming: next,
@@ -317,8 +538,14 @@ function pickSooner(member: VisitRow | undefined, host: VisitRow | undefined, _u
   return memberMs <= hostMs ? toVisit(member, "member") : toVisit(host, "counselor");
 }
 
-function shiftDate(ymd: string, days: number): string {
-  const [y, m, d] = ymd.split("-").map(Number);
+function ymd(value: unknown): string {
+  const text = value instanceof Date ? value.toISOString() : String(value ?? "");
+  const match = text.match(/\d{4}-\d{2}-\d{2}/);
+  return match ? match[0] : text.slice(0, 10);
+}
+
+function shiftDate(date: string, days: number): string {
+  const [y, m, d] = date.split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d + days));
   return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
 }
@@ -349,6 +576,48 @@ export const saveMood = createServerFn({ method: "POST" })
             note = excluded.note,
             share_with_counselors = excluded.share_with_counselors
     `;
+    return { ok: true as const };
+  });
+
+const medSchema = z.object({
+  id: z.number().int().positive().optional(),
+  name: z.string().trim().min(1).max(80),
+  dose: z.string().trim().max(40),
+  taken: z.string().trim().max(40),
+  share: z.boolean(),
+});
+
+export const saveMedication = createServerFn({ method: "POST" })
+  .validator((input: z.infer<typeof medSchema>) => medSchema.parse(input))
+  .middleware([authMiddleware])
+  .handler(async ({ data, context }) => {
+    const sql = await getSql();
+    if (data.id) {
+      const rows = await sql<{ id: number }>`
+        update medications
+        set name = ${data.name}, dose = ${data.dose}, taken = ${data.taken}, share_with_counselors = ${data.share}
+        where id = ${data.id} and user_id = ${context.userId}
+        returning id
+      `;
+      if (!rows[0]) throw new Error("That medication is not on your list.");
+      return { id: num(rows[0].id) };
+    }
+    const count = await sql<{ n: number }>`select count(*) as n from medications where user_id = ${context.userId}`;
+    if (num(count[0]?.n) >= 40) throw new Error("Keep the list to 40 medications.");
+    const rows = await sql<{ id: number }>`
+      insert into medications (user_id, name, dose, taken, share_with_counselors)
+      values (${context.userId}, ${data.name}, ${data.dose}, ${data.taken}, ${data.share})
+      returning id
+    `;
+    return { id: num(rows[0].id) };
+  });
+
+export const deleteMedication = createServerFn({ method: "POST" })
+  .validator((input: { id: number }) => z.object({ id: z.number().int().positive() }).parse(input))
+  .middleware([authMiddleware])
+  .handler(async ({ data, context }) => {
+    const sql = await getSql();
+    await sql`delete from medications where id = ${data.id} and user_id = ${context.userId}`;
     return { ok: true as const };
   });
 
@@ -653,6 +922,7 @@ export const getSessionRoom = createServerFn({ method: "GET" })
     const role: SessionRoom["role"] =
       row.counselor_id === context.userId ? "counselor" : sample ? "solo" : "member";
     let notes: SessionRoom["notes"] = [];
+    let medications: SessionRoom["medications"] = [];
     if (bool(row.share_mood)) {
       const shared = await sql<{ logged_on: string; mood: number; note: string }>`
         select logged_on::text as logged_on, mood, note
@@ -665,10 +935,17 @@ export const getSessionRoom = createServerFn({ method: "GET" })
         order by logged_on
       `;
       notes = shared.map((item) => ({
-        loggedOn: String(item.logged_on).slice(0, 10),
+        loggedOn: ymd(item.logged_on),
         mood: num(item.mood),
         note: item.note,
       }));
+      const meds = await sql<{ name: string; dose: string; taken: string }>`
+        select name, dose, taken
+        from medications
+        where user_id = ${row.member_id} and share_with_counselors = true
+        order by name
+      `;
+      medications = meds.map((item) => ({ name: item.name, dose: item.dose, taken: item.taken }));
     }
     return {
       id: num(row.id),
@@ -681,6 +958,7 @@ export const getSessionRoom = createServerFn({ method: "GET" })
       counselorName: row.counselor_name,
       sample,
       notes,
+      medications,
     };
   });
 

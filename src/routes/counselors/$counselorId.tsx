@@ -53,6 +53,25 @@ function CounselorPage() {
             <TagGroup title="Treatment specialties" items={person.specialties} />
             <p className="text-sm text-muted">{DISCLAIMER}</p>
             <section className="space-y-3">
+              <h2 className="font-display text-2xl">Practices</h2>
+              {query.data?.practices.length ? (
+                query.data.practices.map((practice) => (
+                  <Link
+                    key={practice.id}
+                    to="/practice/$practiceId"
+                    params={{ practiceId: String(practice.id) }}
+                    className="block rounded-card border border-line bg-surface p-4"
+                  >
+                    <p className="text-xs text-spruce">{practice.topic}</p>
+                    <p className="font-medium">{practice.title}</p>
+                    <p className="text-sm text-muted">{practice.minutes} min</p>
+                  </Link>
+                ))
+              ) : (
+                <p className="text-sm text-muted">No practices published yet.</p>
+              )}
+            </section>
+            <section className="space-y-3">
               <h2 className="font-display text-2xl">Reviews</h2>
               {query.data?.reviews.length ? (
                 query.data.reviews.map((review) => (
