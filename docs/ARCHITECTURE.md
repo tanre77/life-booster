@@ -95,6 +95,12 @@ Medications use the same visit switch plus their own share flag. They are not li
 
 `getDashboard` must keep returning moods if you add a column. A thrown query here makes Today look like the save failed. The Today page also writes the saved mood into the React Query cache before it refetches, so a slow refresh does not clear the chart.
 
+## Demo journal
+
+There is no journal table. Member notes stay on `mood_entries` for the signed-in user, limited to the last seven days. Sample counselors stay unseeded.
+
+[src/lib/life/demo-journal.ts](../src/lib/life/demo-journal.ts) holds nine read-only entries for a fictional persona, Alex, from 2026-01-05 to 2026-01-15. `JournalEntry` in [src/lib/life/types.ts](../src/lib/life/types.ts) is the model: date, feeling words, a 1–5 `mood` averaged from those feelings onto `MOODS`, and the body. `loadDemoJournal` returns the list only when demo mode is on. The home page turns it on with `VITE_LIFE_BOOSTER_DEMO=1` or `?demo=1`. The loader also accepts `LIFE_BOOSTER_DEMO=1` when called directly. It does not insert rows.
+
 ## Video
 
 [src/components/video-room.tsx](../src/components/video-room.tsx) opens the camera, then polls `call_presence` and `call_signals`. The member and the counselor both create offers. If both have a local offer, the member keeps theirs and the counselor rolls back and answers.
