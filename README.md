@@ -12,7 +12,7 @@ This is peer support. Counselors are not licensed therapists, psychologists, psy
 | Library | Anyone signed in | Practices by topic, counselors to follow, book a visit |
 | Visits | Both | Upcoming and past appointments, then the video room |
 | Studio | Counselor | Bio, specialties, hourly rate, hours, Venmo username |
-| You | Signed in | Display name, light or dark appearance |
+| You | Signed in | Display name, light or dark appearance, Zoom or Google Meet |
 
 Sign-in is email and password, or Apple. Notes and medications stay private until the member marks them shareable and turns sharing on for that visit.
 
@@ -29,6 +29,23 @@ npm run dev
 ```
 
 The app listens on port 8080. `npm run typecheck` and `npm run build` should both pass. Schema changes go in a new file under [migrations/](migrations/). Do not edit a migration that has already shipped except to stop it from re-seeding data.
+
+## Video meetings
+
+On You, each person picks Zoom or Google Meet. That choice is saved on their profile and used when they create a link for a visit.
+
+`createMeeting` in [src/lib/life/meetings.ts](src/lib/life/meetings.ts) is the shared entry. Google Meet creates a Calendar event with `conferenceData` (`conferenceDataVersion=1`, solution `hangoutsMeet`). Zoom calls the Create Meeting API (`POST /v2/users/me/meetings`) with a Server-to-Server OAuth token. Credentials come from the environment only:
+
+| Variable | Provider |
+|---|---|
+| `ZOOM_ACCOUNT_ID`, `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET` | Zoom |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` | Google Meet |
+| `GOOGLE_CALENDAR_ID` | Optional. Defaults to `primary` |
+| `VITE_LIFE_BOOSTER_DEMO=1` or `?demo=1` | Practice links. Zoom and Google are not called |
+
+If the chosen provider has no credentials, the visit offers an instant link (`https://zoom.us/start/videomeeting` or `https://meet.google.com/new`) or a link the person pastes in.
+
+Meeting titles are the fixed phrase "Life Booster visit". The request does not include notes. The only journal in the repo is the fictional, anonymized Alex demo in [src/lib/life/demo-journal.ts](src/lib/life/demo-journal.ts).
 
 Without `DATABASE_URL`, the server uses embedded Postgres (PGLite) and applies [migrations/](migrations/) on startup. With `DATABASE_URL`, `npm run db:migrate` applies the same files to Neon.
 

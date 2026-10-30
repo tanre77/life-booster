@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import { VisitMeetingCard } from "@/components/visit-meeting-card";
 import { Stars } from "@/components/stars";
 import { Button, Panel, Shell, fieldClass } from "@/components/shell";
 import { RedirectToSignIn } from "@/lib/auth/gates";
@@ -106,13 +107,16 @@ function VisitCard({ visit }: { visit: Visit }) {
         </p>
       </div>
       {visit.status !== "cancelled" ? (
-        <Link
-          to="/session/$appointmentId"
-          params={{ appointmentId: String(visit.id) }}
-          className="inline-flex min-h-11 items-center rounded-full bg-spruce-deep px-4 text-sm text-surface"
-        >
-          {visit.role === "counselor" ? "Join video" : "Open video"}
-        </Link>
+        <>
+          <Link
+            to="/session/$appointmentId"
+            params={{ appointmentId: String(visit.id) }}
+            className="inline-flex min-h-11 items-center rounded-full bg-spruce-deep px-4 text-sm text-surface"
+          >
+            {visit.role === "counselor" ? "Join video" : "Open video"}
+          </Link>
+          <VisitMeetingCard appointmentId={visit.id} meeting={visit.meeting} />
+        </>
       ) : (
         <p className="text-sm text-muted">Cancelled. Life Booster may dismiss a counselor without notice, which cancels future visits.</p>
       )}

@@ -7,6 +7,7 @@ import { Button, Panel, Shell, fieldClass } from "@/components/shell";
 import { DISCLAIMER, MOODS } from "@/lib/life/catalog";
 import { getDashboard, listCounselors, deleteMedication, saveMedication, saveMood } from "@/lib/life/api";
 import type { Dashboard } from "@/lib/life/types";
+import { meetingProviderLabel } from "@/lib/life/meetings";
 import { formatMoney } from "@/lib/life/money";
 import { labelDate, localYMD } from "@/lib/life/time";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -436,13 +437,29 @@ function Today({ name }: { name: string }) {
                 {" · "}
                 {upcoming.durationMin} min
               </p>
-              <Link
-                to="/session/$appointmentId"
-                params={{ appointmentId: String(upcoming.id) }}
-                className="inline-flex min-h-11 items-center rounded-full bg-spruce-deep px-4 text-sm font-medium text-surface"
-              >
-                Open video room
-              </Link>
+              <div className="flex flex-wrap gap-3">
+                <Link
+                  to="/session/$appointmentId"
+                  params={{ appointmentId: String(upcoming.id) }}
+                  className="inline-flex min-h-11 items-center rounded-full bg-spruce-deep px-4 text-sm font-medium text-surface"
+                >
+                  Open video room
+                </Link>
+                {upcoming.meeting ? (
+                  <a
+                    href={upcoming.meeting.joinUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex min-h-11 items-center text-sm font-medium text-spruce-deep"
+                  >
+                    Open {meetingProviderLabel(upcoming.meeting.provider)}
+                  </a>
+                ) : (
+                  <Link to="/visits" className="inline-flex min-h-11 items-center text-sm font-medium text-spruce-deep">
+                    Add a Zoom or Google Meet link
+                  </Link>
+                )}
+              </div>
             </div>
           ) : (
             <p className="mt-2 text-sm text-muted">Nothing booked. The people directory shows hourly rates and open times.</p>

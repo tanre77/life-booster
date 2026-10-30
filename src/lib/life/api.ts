@@ -5,6 +5,7 @@ import { getSql } from "@/lib/db";
 import { filterProfanity } from "@/lib/life/profanity";
 import { sessionPriceCents, MIN_HOURLY_CENTS, MAX_HOURLY_CENTS } from "@/lib/life/money";
 import { asIso, buildSlots, minutesToHHMM, WEEKDAY_LABELS, type Block } from "@/lib/life/time";
+import { meetingFromRow } from "@/lib/life/meetings";
 import type { CounselorCard, Dashboard, Practice, ReviewItem, SessionRoom, Visit } from "@/lib/life/types";
 
 function tags(value: unknown): string[] {
@@ -439,9 +440,12 @@ export const getDashboard = createServerFn({ method: "GET" })
       sql<VisitRow>`
         select a.id, c.display_name as other_name, a.counselor_id as other_id, a.starts_at,
                a.duration_min, a.amount_cents, a.hourly_rate_cents, a.pay_method, a.pay_status,
-               a.status, a.share_mood, a.ads_discount
+               a.status, a.share_mood, a.ads_discount,
+               m.provider as meeting_provider, m.join_url as meeting_url,
+               m.external_id as meeting_external_id, m.source as meeting_source
         from appointments a
         join counselor_profiles c on c.user_id = a.counselor_id
+        left join visit_meetings m on m.appointment_id = a.id
         where a.member_id = ${context.userId}
           and a.status = 'booked'
           and a.starts_at > now() - interval '30 minutes'
@@ -451,9 +455,12 @@ export const getDashboard = createServerFn({ method: "GET" })
       sql<VisitRow>`
         select a.id, coalesce(p.display_name, 'Member') as other_name, a.member_id as other_id, a.starts_at,
                a.duration_min, a.amount_cents, a.hourly_rate_cents, a.pay_method, a.pay_status,
-               a.status, a.share_mood, a.ads_discount
+               a.status, a.share_mood, a.ads_discount,
+               m.provider as meeting_provider, m.join_url as meeting_url,
+               m.external_id as meeting_external_id, m.source as meeting_source
         from appointments a
         left join profiles p on p.user_id = a.member_id
+        left join visit_meetings m on m.appointment_id = a.id
         where a.counselor_id = ${context.userId}
           and a.status = 'booked'
           and a.starts_at > now() - interval '30 minutes'
@@ -507,6 +514,10 @@ type VisitRow = {
   status: string;
   share_mood: boolean;
   ads_discount: boolean;
+  meeting_provider: string | null;
+  meeting_url: string | null;
+  meeting_external_id: string | null;
+  meeting_source: string | null;
 };
 
 function toVisit(row: VisitRow, role: "member" | "counselor", hasReview = false): Visit {
@@ -525,6 +536,7 @@ function toVisit(row: VisitRow, role: "member" | "counselor", hasReview = false)
     shareMood: bool(row.share_mood),
     adsDiscount: bool(row.ads_discount),
     hasReview,
+    meeting: meetingFromRow(row),
   };
 }
 
@@ -862,9 +874,12 @@ export const listVisits = createServerFn({ method: "GET" })
       sql<VisitRow>`
         select a.id, c.display_name as other_name, a.counselor_id as other_id, a.starts_at,
                a.duration_min, a.amount_cents, a.hourly_rate_cents, a.pay_method, a.pay_status,
-               a.status, a.share_mood, a.ads_discount
+               a.status, a.share_mood, a.ads_discount,
+               m.provider as meeting_provider, m.join_url as meeting_url,
+               m.external_id as meeting_external_id, m.source as meeting_source
         from appointments a
         join counselor_profiles c on c.user_id = a.counselor_id
+        left join visit_meetings m on m.appointment_id = a.id
         where a.member_id = ${context.userId}
         order by a.starts_at desc
         limit 40
@@ -872,9 +887,12 @@ export const listVisits = createServerFn({ method: "GET" })
       sql<VisitRow>`
         select a.id, coalesce(p.display_name, 'Member') as other_name, a.member_id as other_id, a.starts_at,
                a.duration_min, a.amount_cents, a.hourly_rate_cents, a.pay_method, a.pay_status,
-               a.status, a.share_mood, a.ads_discount
+               a.status, a.share_mood, a.ads_discount,
+               m.provider as meeting_provider, m.join_url as meeting_url,
+               m.external_id as meeting_external_id, m.source as meeting_source
         from appointments a
         left join profiles p on p.user_id = a.member_id
+        left join visit_meetings m on m.appointment_id = a.id
         where a.counselor_id = ${context.userId}
         order by a.starts_at desc
         limit 40
@@ -947,6 +965,17 @@ export const getSessionRoom = createServerFn({ method: "GET" })
       `;
       medications = meds.map((item) => ({ name: item.name, dose: item.dose, taken: item.taken }));
     }
+    const meetingRows = await sql<{
+      meeting_provider: string | null;
+      meeting_url: string | null;
+      meeting_external_id: string | null;
+      meeting_source: string | null;
+    }>`
+      select provider as meeting_provider, join_url as meeting_url,
+             external_id as meeting_external_id, source as meeting_source
+      from visit_meetings
+      where appointment_id = ${data.id}
+    `;
     return {
       id: num(row.id),
       role,
@@ -959,6 +988,7 @@ export const getSessionRoom = createServerFn({ method: "GET" })
       sample,
       notes,
       medications,
+      meeting: meetingFromRow(meetingRows[0] ?? null),
     };
   });
 

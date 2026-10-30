@@ -26,7 +26,7 @@ page (src/routes)
 | `/visits` | [src/routes/visits.tsx](../src/routes/visits.tsx) | `listVisits` |
 | `/session/$appointmentId` | [src/routes/session/$appointmentId.tsx](../src/routes/session/$appointmentId.tsx) | `getSessionRoom`, messages |
 | `/studio` | [src/routes/studio.tsx](../src/routes/studio.tsx) | `getMyCounselor`, `saveCounselorBio`, `saveAvailability` |
-| `/you` | [src/routes/you.tsx](../src/routes/you.tsx) | `saveDisplayName`, theme in the browser |
+| `/you` | [src/routes/you.tsx](../src/routes/you.tsx) | `saveDisplayName`, `getMeetingSettings`, `saveMeetingProvider`, theme in the browser |
 | `/desk` | [src/routes/desk.tsx](../src/routes/desk.tsx) | operator list, first signed-in user can claim the desk |
 
 The shell in [src/components/shell.tsx](../src/components/shell.tsx) is the five tabs. Video is a full-screen stage and is not inside the tab padding.
@@ -34,7 +34,7 @@ The shell in [src/components/shell.tsx](../src/components/shell.tsx) is the five
 ## Data
 
 ```text
-profiles              display name, operator flag
+profiles              display name, operator flag, meeting_provider (zoom or google_meet)
 mood_entries          one row per user per date, mood 1–5, note, share flag
 medications           name, dose, when taken, share flag
 counselor_profiles    bio, tags as JSON text, rate, timezone, venmo, standing
@@ -44,6 +44,7 @@ reviews               one per appointment
 session_messages      chat on an appointment
 call_signals          WebRTC offer, answer, ice
 call_presence         who has the room open
+visit_meetings        one join link per appointment (provider, url, source)
 ```
 
 Migrations:
@@ -55,6 +56,8 @@ Migrations:
 | `0003_venmo.sql` | `counselor_profiles.venmo_handle` |
 | `0004_remove_sample_counselors.sql` | deletes `sample-%` rows |
 | `0005_medications.sql` | `medications` |
+| `0006_library.sql` | practices and follows |
+| `0007_meeting_provider.sql` | `profiles.meeting_provider`, `visit_meetings` |
 
 `0002` used to insert four sample counselors. That insert is gone. Do not put it back. `0004` deletes them on databases that already applied the old `0002`.
 
@@ -102,6 +105,16 @@ Medications use the same visit switch plus their own share flag. They are not li
 The timer starts when `remoteLive` becomes true, then counts down `durationMin`. Recording is optional, local, and uses `MediaRecorder` on a mixed stream. It is not uploaded.
 
 iPhone will not play remote audio from a hidden or muted video element, and a later `play()` is outside the tap. The remote `<video>` is muted. A separate `<audio>` element plays the voice. If `play()` is rejected, the room shows **Tap to hear**. The local preview video stays muted so the room does not echo.
+
+## Counselor video links
+
+[src/lib/life/meetings.ts](../src/lib/life/meetings.ts) exports `createMeeting`. Zoom and Google Meet each implement `MeetingProvider`. The visit card calls `createVisitMeeting`, which reads the signed-in user's `profiles.meeting_provider` and stores one row in `visit_meetings`.
+
+Google posts a Calendar event with `conferenceData.createRequest.conferenceSolutionKey.type` set to `hangoutsMeet` and `conferenceDataVersion=1`. Zoom posts to `https://api.zoom.us/v2/users/me/meetings` after a Server-to-Server token request. Both credential sets are read from `process.env` inside the server function. The client receives only `zoomConfigured` and `googleConfigured`.
+
+`VITE_LIFE_BOOSTER_DEMO=1` or `?demo=1` sets `source` to `demo` and skips the network. With credentials missing, the panel asks for a pasted https link on `zoom.us` or `meet.google.com`, or uses the instant start URL.
+
+The meeting summary is the constant `Life Booster visit`. That path does not select `mood_entries`. The only journal text in the repo is the fictional Alex demo in [src/lib/life/demo-journal.ts](../src/lib/life/demo-journal.ts).
 
 ## Appearance
 

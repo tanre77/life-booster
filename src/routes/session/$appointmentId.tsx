@@ -3,11 +3,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Shell } from "@/components/shell";
 import { VideoStage } from "@/components/video-room";
+import { VisitMeetingCard } from "@/components/visit-meeting-card";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getSessionRoom, listMessages, postMessage } from "@/lib/life/api";
 import type { SessionRoom } from "@/lib/life/types";
 import { DISCLAIMER, MOODS } from "@/lib/life/catalog";
+import { meetingProviderLabel } from "@/lib/life/meetings";
 
 export const Route = createFileRoute("/session/$appointmentId")({ component: SessionPage });
 
@@ -57,8 +59,23 @@ function Room({ appointmentId, data }: { appointmentId: number; data: SessionRoo
   }
 
   return (
-    <VideoStage appointmentId={appointmentId} role={data.role} title={data.otherName} durationMin={data.durationMin} sheet={
+    <VideoStage
+      appointmentId={appointmentId}
+      role={data.role}
+      title={data.otherName}
+      durationMin={data.durationMin}
+      externalJoin={
+        data.meeting ? (
+          <a href={data.meeting.joinUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center underline">
+            Open {meetingProviderLabel(data.meeting.provider)}
+          </a>
+        ) : null
+      }
+      sheet={
       <div className="space-y-4">
+        {data.status !== "cancelled" ? (
+          <VisitMeetingCard appointmentId={appointmentId} meeting={data.meeting} />
+        ) : null}
         <section>
           <h2 className="font-display text-xl">Shared notes</h2>
           {!data.shareMood ? (
