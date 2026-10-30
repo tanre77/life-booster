@@ -1,5 +1,9 @@
 # Prompts
 
+**English** · [Español](es/PROMPTS.md) · [Français](fr/PROMPTS.md) · [Deutsch](de/PROMPTS.md) · [Português (Brasil)](pt-BR/PROMPTS.md) · [Italiano](it/PROMPTS.md) · [简体中文](zh-CN/PROMPTS.md) · [繁體中文](zh-TW/PROMPTS.md) · [日本語](ja/PROMPTS.md) · [한국어](ko/PROMPTS.md) · [العربية](ar/PROMPTS.md) · [हिन्दी](hi/PROMPTS.md) · [Русский](ru/PROMPTS.md) · [Tiếng Việt](vi/PROMPTS.md) · [Türkçe](tr/PROMPTS.md) · [Bahasa Indonesia](id/PROMPTS.md) · [Polski](pl/PROMPTS.md) · [Nederlands](nl/PROMPTS.md) · [Українська](uk/PROMPTS.md) · [Filipino](fil/PROMPTS.md) · [Kiswahili](sw/PROMPTS.md)
+
+[How translations are updated](TRANSLATIONS.md).
+
 Paste one of these when you want a change that has already gone wrong once. Each prompt names the files and the rule to leave alone.
 
 ## Counselor shows up after saving hours
