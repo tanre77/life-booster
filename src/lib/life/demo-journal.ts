@@ -1,4 +1,5 @@
 import type { JournalEntry } from "./types.ts";
+import { isPreviewMode } from "./preview-flags.ts";
 
 /**
  * Read-only journal for the fictional persona Alex.
@@ -6,6 +7,7 @@ import type { JournalEntry } from "./types.ts";
  * Member notes stay on `mood_entries` and only cover the signed-in week.
  * These entries are January 2026, so they are not seeded into that table.
  * `loadDemoJournal` returns them only when demo mode is on.
+ * Preview mode extends this loader: the same array, not a second copy.
  */
 export const DEMO_PERSONA_NOTE =
   "Fictional persona: Alex. All names, places, providers, and employers are made up. Based on real entries with identifying details removed.";
@@ -113,6 +115,10 @@ export type DemoModeSource = {
   search?: string;
   /** Parsed `demo` search value, when the router has already decoded it. */
   demo?: unknown;
+  /** Preview mode (`?preview=1` plus an env flag) turns this same journal on. */
+  LIFE_BOOSTER_PREVIEW?: string;
+  VITE_LIFE_BOOSTER_PREVIEW?: string;
+  preview?: unknown;
 };
 
 function flagOn(value: unknown): boolean {
@@ -135,7 +141,8 @@ export function isDemoMode(source: DemoModeSource = demoModeFromProcess()): bool
     flagOn(source.LIFE_BOOSTER_DEMO) ||
     flagOn(source.VITE_LIFE_BOOSTER_DEMO) ||
     flagOn(source.demo) ||
-    searchRequestsDemo(source.search)
+    searchRequestsDemo(source.search) ||
+    isPreviewMode(source)
   );
 }
 

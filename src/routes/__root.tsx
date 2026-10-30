@@ -1,8 +1,18 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
+import {
+  createRootRoute,
+  HeadContent,
+  Outlet,
+  Scripts,
+  useRouterState,
+} from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
+import { PreviewLimited } from "@/components/preview-limited";
+import { PreviewNetworkGuard } from "@/components/preview-network-guard";
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
+import { previewRoutePolicy } from "@/lib/life/preview-mode";
+import { useIsPreviewMode } from "@/lib/life/use-preview-mode";
 import appCss from "../styles.css?url";
 
 const APP_NAME = "Life Booster";
@@ -52,13 +62,21 @@ function RootComponent() {
         <PreviewHostBridge />
         <AuthProvider>
           <AppQueryProvider>
-            <Outlet />
+            <PreviewNetworkGuard />
+            <PreviewSwitch />
           </AppQueryProvider>
         </AuthProvider>
         <Scripts />
       </body>
     </html>
   );
+}
+
+function PreviewSwitch() {
+  const preview = useIsPreviewMode();
+  const path = useRouterState({ select: (state) => state.location.pathname });
+  if (preview && previewRoutePolicy(path) === "blocked") return <PreviewLimited />;
+  return <Outlet />;
 }
 
 function AppQueryProvider({ children }: { children: ReactNode }) {
