@@ -1,7 +1,7 @@
-import { useRouterState } from "@tanstack/react-router";
 import { Panel } from "@/components/shell";
 import { MOODS } from "@/lib/life/catalog";
-import { DEMO_PERSONA_NOTE, loadDemoJournal } from "@/lib/life/demo-journal";
+import { DEMO_PERSONA_NOTE } from "@/lib/life/demo-journal";
+import { useSampleJournal } from "@/lib/life/use-preview-mode";
 
 function journalDate(ymd: string): string {
   const [year, month, day] = ymd.split("-").map(Number);
@@ -14,20 +14,15 @@ function journalDate(ymd: string): string {
 }
 
 export function DemoJournalPanel() {
-  const searchStr = useRouterState({ select: (state) => state.location.searchStr });
-  const demo = useRouterState({
-    select: (state) => (state.location.search as { demo?: unknown }).demo,
-  });
-  const entries = loadDemoJournal({
-    VITE_LIFE_BOOSTER_DEMO: import.meta.env.VITE_LIFE_BOOSTER_DEMO,
-    search: searchStr,
-    demo,
-  });
+  const entries = useSampleJournal();
   if (!entries.length) return null;
   return (
     <Panel className="space-y-4">
       <div>
-        <p className="text-xs font-medium tracking-[0.18em] text-spruce uppercase">
+        <p
+          data-testid="sample-journal"
+          className="text-xs font-medium tracking-[0.18em] text-spruce uppercase"
+        >
           Sample journal
         </p>
         <h2 className="mt-1 font-display text-xl">Alex, January 2026</h2>

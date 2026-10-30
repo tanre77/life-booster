@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { PREVIEW_USER_ID } from "@/lib/life/preview-mode";
+import { useIsPreviewMode } from "@/lib/life/use-preview-mode";
 import { authClient, authEnabled } from "./client";
 
 /** Normalized user shape used across the app, auth on or off. */
@@ -25,6 +27,20 @@ export const DEV_USER: AppUser = {
   profileImageUrl: null,
   isDevFallback: true,
 };
+
+/**
+ * Fictional preview persona. Not a session, not the dev user, and never sent
+ * to the server. Preview pages do not call account APIs with this id.
+ */
+export const PREVIEW_USER: AppUser = {
+  id: PREVIEW_USER_ID,
+  displayName: "Alex",
+  primaryEmail: null,
+  profileImageUrl: null,
+  isDevFallback: false,
+};
+
+const PREVIEW_STATE: CurrentUserState = { user: PREVIEW_USER, isPending: false };
 
 /** `useCurrentUserState()` result: the user plus the session-loading flag. */
 export type CurrentUserState = {
@@ -58,12 +74,13 @@ const DEV_STATE: CurrentUserState = { user: DEV_USER, isPending: false };
  * call keeps a stable hook order across every render of a given component.
  */
 export function useCurrentUserState(): CurrentUserState {
-  if (!authEnabled) return DEV_STATE;
+  const preview = useIsPreviewMode();
+  if (!authEnabled) return preview ? PREVIEW_STATE : DEV_STATE;
   // eslint-disable-next-line react-hooks/rules-of-hooks -- authEnabled is constant for the app's lifetime
-  return useSessionUserState();
+  return useSessionUserState(preview);
 }
 
-function useSessionUserState(): CurrentUserState {
+function useSessionUserState(preview: boolean): CurrentUserState {
   const { data, isPending } = authClient.useSession();
   const [timedOut, setTimedOut] = useState(false);
   useEffect(() => {
@@ -82,7 +99,13 @@ function useSessionUserState(): CurrentUserState {
     () => (id ? { id, displayName, primaryEmail, profileImageUrl, isDevFallback: false } : null),
     [id, displayName, primaryEmail, profileImageUrl],
   );
-  return useMemo(() => ({ user, isPending: isPending && !timedOut }), [user, isPending, timedOut]);
+  const session = useMemo(
+    () => ({ user, isPending: isPending && !timedOut }),
+    [user, isPending, timedOut],
+  );
+  // Ignore the real session. Preview must not surface an account identity.
+  if (preview) return PREVIEW_STATE;
+  return session;
 }
 
 /**

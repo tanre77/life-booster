@@ -4,10 +4,13 @@ import { Button, Panel, Shell, fieldClass } from "@/components/shell";
 import { GROK_PROVIDERS, authClient, captureSessionToken, signIn } from "@/lib/auth/client";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { hrefWithPreview } from "@/lib/life/preview-mode";
+import { useIsPreviewMode } from "@/lib/life/use-preview-mode";
 
 export const Route = createFileRoute("/login")({ component: LoginPage });
 
 function LoginPage() {
+  const preview = useIsPreviewMode();
   const { user, isPending } = useCurrentUserState();
   const navigate = useNavigate();
   const [mode, setMode] = useState<"in" | "up">("up");
@@ -16,6 +19,20 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  if (preview) {
+    return (
+      <Shell>
+        <div className="mx-auto grid max-w-md gap-4">
+          <h1 className="font-display text-4xl">Preview mode</h1>
+          <p className="text-muted">No sign-in. This preview uses Alex&apos;s sample journal and does not open an account.</p>
+          <a href={hrefWithPreview("/")} className="inline-flex min-h-11 items-center justify-center rounded-full bg-spruce-deep px-4 text-sm font-medium text-surface">
+            Back to the sample journal
+          </a>
+        </div>
+      </Shell>
+    );
+  }
 
   if (!isPending && user) return <RedirectToSignIn to="/" />;
 

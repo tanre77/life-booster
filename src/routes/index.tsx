@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { DemoJournalPanel } from "@/components/demo-journal";
+import { PreviewToday } from "@/components/preview-today";
 import { MoodChart } from "@/components/mood-chart";
 import { SitTimer } from "@/components/sit-timer";
 import { Button, Panel, Shell, fieldClass } from "@/components/shell";
@@ -11,16 +12,18 @@ import type { Dashboard } from "@/lib/life/types";
 import { formatMoney } from "@/lib/life/money";
 import { labelDate, localYMD } from "@/lib/life/time";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { useIsPreviewMode } from "@/lib/life/use-preview-mode";
 import { Stars } from "@/components/stars";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({ component: Home });
 
 function Home() {
+  const preview = useIsPreviewMode();
   const { user } = useCurrentUserState();
   return (
     <Shell>
-      {user ? <Today name={user.displayName ?? ""} /> : <Landing />}
+      {preview ? <PreviewToday /> : user ? <Today name={user.displayName ?? ""} /> : <Landing />}
     </Shell>
   );
 }
