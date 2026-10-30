@@ -1,3 +1,5 @@
+import type { MeetingRecord } from "@/lib/life/meetings";
+
 export type CounselorCard = {
   id: string;
   displayName: string;
@@ -64,6 +66,7 @@ export type Visit = {
   shareMood: boolean;
   adsDiscount: boolean;
   hasReview: boolean;
+  meeting: MeetingRecord | null;
 };
 
 export type Dashboard = {
@@ -91,4 +94,5 @@ export type SessionRoom = {
   sample: boolean;
   notes: { loggedOn: string; mood: number; note: string }[];
   medications: { name: string; dose: string; taken: string }[];
+  meeting: MeetingRecord | null;
 };

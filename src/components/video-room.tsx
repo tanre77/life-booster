@@ -46,12 +46,14 @@ export function VideoStage({
   title,
   durationMin,
   sheet,
+  externalJoin,
 }: {
   appointmentId: number;
   role: "member" | "counselor" | "solo";
   title: string;
   durationMin: number;
   sheet: ReactNode;
+  externalJoin?: ReactNode;
 }) {
   const localRef = useRef<HTMLVideoElement>(null);
   const remoteRef = useRef<HTMLVideoElement>(null);
@@ -425,6 +427,7 @@ export function VideoStage({
             >
               {role === "counselor" ? "Join video" : "Start video"}
             </Button>
+            {externalJoin ? <div className="text-sm text-surface">{externalJoin}</div> : null}
           </div>
         </div>
       ) : null}

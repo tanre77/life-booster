@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { MeetingPreferenceCard } from "@/components/meeting-preference-card";
 import { Button, Panel, Shell, fieldClass } from "@/components/shell";
 import { UserButton } from "@/lib/auth/gates";
 import { RedirectToSignIn } from "@/lib/auth/gates";
@@ -85,6 +86,7 @@ function YouPage() {
           <h2 className="font-display text-2xl">Appearance</h2>
           <ThemeSwitch />
         </Panel>
+        <MeetingPreferenceCard />
         <Panel className="space-y-3">
           <UserButton />
           <p className="text-sm text-muted">{user.primaryEmail}</p>
