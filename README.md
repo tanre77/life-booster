@@ -30,6 +30,19 @@ npm run dev
 
 The app listens on port 8080. `npm run typecheck` and `npm run build` should both pass. Schema changes go in a new file under [migrations/](migrations/). Do not edit a migration that has already shipped except to stop it from re-seeding data.
 
+## Demo journal
+
+A read-only journal for a fictional persona named Alex lives in [src/lib/life/demo-journal.ts](src/lib/life/demo-journal.ts). Nine entries run from January 5 to January 15, 2026. Each feeling line is kept as written and also mapped onto the 1–5 mood scale (`Heavy` through `Lifted`).
+
+Demo mode is off unless you turn it on:
+
+- `VITE_LIFE_BOOSTER_DEMO=1` in the environment before `npm run dev` or `npm run build` shows the journal on the home page
+- `?demo=1` on the page shows it for that visit (`1`, `true`, `yes`, or `on`)
+
+`loadDemoJournal` also accepts `LIFE_BOOSTER_DEMO=1`. The test uses that. The page passes the `VITE_` flag and the query string so the server render and the browser stay in agreement.
+
+The home page then lists the dates, feelings, and full text. Nothing is written to `mood_entries` or any other table. Signed-in mood logging is unchanged.
+
 Without `DATABASE_URL`, the server uses embedded Postgres (PGLite) and applies [migrations/](migrations/) on startup. With `DATABASE_URL`, `npm run db:migrate` applies the same files to Neon.
 
 ## Layout

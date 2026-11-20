@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { DemoJournalPanel } from "@/components/demo-journal";
 import { MoodChart } from "@/components/mood-chart";
 import { SitTimer } from "@/components/sit-timer";
 import { Button, Panel, Shell, fieldClass } from "@/components/shell";
@@ -59,6 +60,7 @@ function Landing() {
           </div>
           <MoodChart points={LANDING_WEEK} />
         </Panel>
+        <DemoJournalPanel />
         <p className="text-sm text-muted">{DISCLAIMER}</p>
       </div>
       <div className="space-y-3">
@@ -326,6 +328,7 @@ function Today({ name }: { name: string }) {
             </ul>
           </div>
         </Panel>
+        <DemoJournalPanel />
       </div>
       <div className="space-y-4">
         <Panel className="space-y-3">

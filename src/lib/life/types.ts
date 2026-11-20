@@ -41,6 +41,14 @@ export type MoodEntry = {
   shareWithCounselors: boolean;
 };
 
+/** One journal day. `mood` uses the 1–5 scale in `MOODS`. `feelings` stays in the writer's words. */
+export type JournalEntry = {
+  loggedOn: string;
+  feelings: string;
+  mood: number;
+  body: string;
+};
+
 export type Medication = {
   id: number;
   name: string;
