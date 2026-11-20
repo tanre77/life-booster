@@ -1,5 +1,9 @@
 # Architecture
 
+**English** · [Español](es/ARCHITECTURE.md) · [Français](fr/ARCHITECTURE.md) · [Deutsch](de/ARCHITECTURE.md) · [Português (Brasil)](pt-BR/ARCHITECTURE.md) · [Italiano](it/ARCHITECTURE.md) · [简体中文](zh-CN/ARCHITECTURE.md) · [繁體中文](zh-TW/ARCHITECTURE.md) · [日本語](ja/ARCHITECTURE.md) · [한국어](ko/ARCHITECTURE.md) · [العربية](ar/ARCHITECTURE.md) · [हिन्दी](hi/ARCHITECTURE.md) · [Русский](ru/ARCHITECTURE.md) · [Tiếng Việt](vi/ARCHITECTURE.md) · [Türkçe](tr/ARCHITECTURE.md) · [Bahasa Indonesia](id/ARCHITECTURE.md) · [Polski](pl/ARCHITECTURE.md) · [Nederlands](nl/ARCHITECTURE.md) · [Українська](uk/ARCHITECTURE.md) · [Filipino](fil/ARCHITECTURE.md) · [Kiswahili](sw/ARCHITECTURE.md)
+
+[How translations are updated](TRANSLATIONS.md).
+
 Life Booster is a TanStack Start app. Pages live in `src/routes/`. Data changes go through server functions in [src/lib/life/api.ts](../src/lib/life/api.ts). Every function that reads or writes a person's rows uses `authMiddleware` and scopes SQL with `context.userId`. The client never sends a user id.
 
 ## Request path
